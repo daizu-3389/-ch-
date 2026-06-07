@@ -39,7 +39,9 @@
 
         /* 📖 スレッド内部（伝統のdt/dd構造） */
         .thread-header-title { color: #ff0000; font-size: 22px; font-weight: bold; margin: 10px 0 15px 0; border-bottom: 2px solid #ff0000; padding-bottom: 3px; }
-        .posts-box { background-color: #fff; border: 1px solid #ccc; padding: 15px; }
+        
+        /* 【修正】レス一覧をスクロール可能にして、書き込みフォームが隠れないように調整 */
+        .posts-box { background-color: #fff; border: 1px solid #ccc; padding: 15px; max-height: 55vh; overflow-y: auto; }
         
         .post-group { scroll-margin-top: 40px; }
         .post-group:target { background-color: #fff0cc; }
@@ -82,21 +84,20 @@
             .sidebar-box { 
                 width: 100%; 
                 position: static; 
-                max-height: 250px; 
+                max-height: 200px; 
                 margin-bottom: 10px; 
             }
 
-            /* ★超重要：スレ一覧、またはスレ詳細が表示されている時は、スマホ画面では板メニューを自動非表示 */
-            .split-container:has(#threadListView.active) .sidebar-box,
-            .split-container:has(#threadDetailView.active) .sidebar-box {
-                display: none;
-            }
+            /* 【修正】スレ開いたときに板メニューを自動非表示にするスタイル（.has の記述）を削除しました */
 
             /* メインコンテンツエリアを画面幅いっぱいに */
             .main-content-box { width: 100%; }
 
             /* レスのインデント（左余白）を浅くして、スマホの狭い画面を有効活用 */
             .post-dd { margin-left: 10px; margin-top: 4px; }
+
+            /* 【修正】スマホ表示時はキーボードが出て狭くなるため、レス一覧の高さを一回りコンパクトに調整 */
+            .posts-box { max-height: 35vh; }
 
             /* 書き込みフォームのスマホ最適化（縦並びにしてタップしやすく） */
             .form-container { width: 100%; max-width: 100%; padding: 12px; }
