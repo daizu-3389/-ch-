@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名無し世界の掲示板（フルスペック版）</title>
+    <style>
+        html { scroll-behavior: smooth; }
+        body { background-color: #fafaf0; color: #000000; font-family: "MS Pゴシック", "MS PGothic", "Mona", "Noto Sans JP", sans-serif; font-size: 14px; margin: 12px; padding: 0; line-height: 1.4; }
+        a { color: #0000ff; text-decoration: underline; cursor: pointer; }
+        a:hover { color: #ff0000; }
+        
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        
+        .nav-text { font-size: 12px; background-color: #efefef; border: 1px solid #ccc; padding: 4px 8px; margin-bottom: 15px; color: #333; }
+        
+        h1.site-title { color: #ff0000; font-size: 26px; text-align: center; margin: 0; font-weight: bold; }
+        .sub-title { font-size: 12px; text-align: center; margin-bottom: 20px; color: #000; }
+
+        /* 🌐 画面1：板一覧 */
+        .menu-box { background-color: #efefef; border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; }
+        .cat-title { font-weight: bold; color: #af0000; margin-top: 14px; font-size: 13px; border-bottom: 1px dashed #999; padding-bottom: 2px; }
+        .cat-title:first-child { margin-top: 0; }
+        .board-links-area { padding: 6px 0 6px 10px; line-height: 1.9; }
+        .board-link { font-size: 13px; margin-right: 12px; display: inline-block; }
+
+        /* 💬 画面2：スレッド一覧 */
+        .board-title { color: #ff0000; font-size: 20px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+        .thread-list-box { background-color: #fff; border: 1px solid #ccc; padding: 10px; }
+        .thread-line { margin-bottom: 6px; font-size: 14px; }
+
+        /* 📖 画面3：スレッド内部 */
+        .thread-header-title { color: #ff0000; font-size: 22px; font-weight: bold; margin: 10px 0 15px 0; border-bottom: 2px solid #ff0000; padding-bottom: 3px; }
+        .posts-box { background-color: #fff; border: 1px solid #ccc; padding: 15px; }
+        
+        .post-dt { font-size: 13px; margin-top: 16px; color: #000; }
+        .post-dt b { color: #008000; } 
+        .post-id { color: #666; font-family: monospace; margin-left: 5px; text-decoration: underline; cursor: pointer; }
+        .post-id:hover { color: #ff0000; }
+        .post-dd { margin-left: 25px; margin-top: 2px; margin-bottom: 15px; white-space: pre-wrap; word-break: break-all; font-size: 14px; color: #000; }
+
+        /* レスアンカーリンク */
+        .res-anchor { color: #0000ff; text-decoration: underline; font-weight: bold; }
+
+        /* 📝 書き込みフォーム */
+        .form-container { background-color: #efefef; border: 1px solid #ccc; padding: 10px; margin-top: 20px; max-width: 600px; }
+        .form-container h3 { margin: 0 0 10px 0; font-size: 13px; color: #af0000; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+        .form-row { margin-bottom: 6px; }
+        .form-row label { font-size: 12px; font-weight: bold; display: inline-block; width: 90px; }
+        .form-row input[type="text"] { width: 220px; border: 1px solid #aaa; font-size: 13px; padding: 2px; background: #fff; color: #000; }
+        .form-row textarea { width: 100%; max-width: 500px; border: 1px solid #aaa; font-size: 14px; padding: 4px; font-family: inherit; background: #fff; color: #000; }
+        .btn-submit { font-size: 12px; font-weight: bold; padding: 2px 15px; cursor: pointer; background: #eee; border: 1px solid #666; color: #000; }
+        .btn-submit:hover { background: #ddd; }
+    </style>
+</head>
+<body>
+
+    <div class="nav-text">
+        <a id="navHomeBtn">■板一覧（ホーム）</a> ＞ <span id="currentLocationDisplay">トップページ</span>
+    </div>
+
+    <div class="main-container">
+        <h1 class="site-title">名無し世界の掲示板</h1>
+        <div class="sub-title">つーか、ネットの全住民が集う、完全最軽量リアルタイム2chロビー。</div>
+
+        <div id="homeView" class="view-section active">
+            <div class="menu-box" id="bbsMenuArea"></div>
+        </div>
+
+        <div id="threadListView" class="view-section">
+            <div class="board-title" id="currentBoardTitleDisplay">掲示板</div>
+            <div class="thread-list-box" id="threadList"></div>
+
+            <div class="form-container">
+                <h3>✨ 新しいスレッドを立てる</h3>
+                <div class="form-row"><label>タイトル：</label><input type="text" id="newThreadTitle" placeholder="スレタイを入力"></div>
+                <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName" value="名無しさん" placeholder="名前#パスワードでトリップ"></div>
+                <div class="form-row"><label>メール：</label><input type="text" id="threadMail" placeholder="sageなど"></div>
+                <div class="form-row"><label>内容：</label><textarea id="threadFirstMessage" rows="3" placeholder="最初の書き込み内容"></textarea></div>
+                <button class="btn-submit" id="createThreadBtn">新規スレッド作成</button>
+            </div>
+        </div>
+
+        <div id="threadDetailView" class="view-section">
+            <a id="backToListViewBtn" style="font-size: 13px; font-weight: bold;">[ 📂 板のスレ一覧に戻る ]</a>
+            <a id="clearNgBtn" style="font-size: 12px; color: #666; margin-left: 15px;">[ 🗑️ あぼーん(NG)をクリア ]</a>
+            <div class="thread-header-title" id="currentThreadTitle">スレッドタイトル</div>
+            <div class="posts-box" id="postList"></div>
+
+            <div class="form-container">
+                <h3>このスレッドにレスを書き込む</h3>
+                <div class="form-row"><label>名前：</label><input type="text" id="postName" value="名無しさん" placeholder="名前#パスワードでトリップ"></div>
+                <div class="form-row"><label>メール：</label><input type="text" id="postMail" placeholder="sageなど"></div>
+                <div class="form-row"><label>本文：</label><textarea id="postMessage" rows="4" placeholder="ここに書き込みを入力 >>1 でアンカー"></textarea></div>
+                <button class="btn-submit" id="sendPostBtn">書き込む</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        // 有さんのFirebase設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyALgzyqyzbSLHX8sBCrtN5L7lNDL-c5HAM",
+            authDomain: "my-2ch-bbs.firebaseapp.com",
+            projectId: "my-2ch-bbs",
+            storageBucket: "my-2ch-bbs.firebasestorage.app",
+            messagingSenderId: "14772039514",
+            appId: "1:14772039514:web:76f3aaf1d7e02fe2a3cd63",
+            measurementId: "G-RKRMPEQKV0",
+            databaseURL: "https://my-2ch-bbs-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        const BOARD_DATA = {
+            "■ 地震・速報・実況": { "namazu": "緊急地震速報", "headline": "ニュース速報", "livegalileo": "なんでも実況G", "liveanb": "実況ch" },
+            "■ ニュース・社会事情": { "newsplus": "ニュース速報＋", "mnewsplus": "芸スポ速報＋", "news4plus": "東アジアニュース＋" },
+            "■ ネット機能・雑談": { "vip": "ニュー速VIP", "news4vip": "ニュー速VIP+", "zatsudan": "なんでも雑談", "welcome": "新機能お試し" },
+            "■ ゲーム・ハード・実況": { "game": "ゲーム実況", "smartphone": "スマホゲーム", "netgame": "ネトゲ実況" },
+            "■ アニメ・漫画・特撮": { "anime": "アニメ・マンガ", "comic": "少年漫画", "voice": "声優" },
+            "■ コンピュータ・ガジェット": { "pc": "PC・ガジェット", "iphone": "iPhone", "android": "Android", "program": "プログラミング" }
+        };
+
+        const ALL_BOARDS = {};
+        for (let cat in BOARD_DATA) {
+            for (let id in BOARD_DATA[cat]) { ALL_BOARDS[id] = BOARD_DATA[cat][id]; }
+        }
+
+        const bbsMenuArea = document.getElementById("bbsMenuArea");
+        const homeView = document.getElementById("homeView");
+        const threadListView = document.getElementById("threadListView");
+        const threadDetailView = document.getElementById("threadDetailView");
+        const navHomeBtn = document.getElementById("navHomeBtn");
+        const currentLocationDisplay = document.getElementById("currentLocationDisplay");
+        const currentBoardTitleDisplay = document.getElementById("currentBoardTitleDisplay");
+        const threadList = document.getElementById("threadList");
+        const postList = document.getElementById("postList");
+        const currentThreadTitle = document.getElementById("currentThreadTitle");
+        
+        const newThreadTitleInput = document.getElementById("newThreadTitle");
+        const threadCreatorNameInput = document.getElementById("threadCreatorName");
+        const threadMailInput = document.getElementById("threadMail");
+        const threadFirstMessageInput = document.getElementById("threadFirstMessage");
+        const createThreadBtn = document.getElementById("createThreadBtn");
+        
+        const postNameInput = document.getElementById("postName");
+        const postMailInput = document.getElementById("postMail");
+        const postMessageInput = document.getElementById("postMessage");
+        const sendPostBtn = document.getElementById("sendPostBtn");
+        const backToListViewBtn = document.getElementById("backToListViewBtn");
+        const clearNgBtn = document.getElementById("clearNgBtn");
+
+        let currentBoardId = ""; 
+        let currentThreadId = null;
+        let threadUnsubscribe = null;
+        let postUnsubscribe = null;
+
+        // 名前保存
+        const savedName = localStorage.getItem("bbs_saved_username") || "名無しさん";
+        threadCreatorNameInput.value = savedName;
+        postNameInput.value = savedName;
+
+        function saveName(name) {
+            localStorage.setItem("bbs_saved_username", name);
+            threadCreatorNameInput.value = name;
+            postNameInput.value = name;
+        }
+        threadCreatorNameInput.addEventListener("input", (e) => saveName(e.target.value));
+        postNameInput.addEventListener("input", (e) => saveName(e.target.value));
+
+        // 🆔 2ch風ID生成
+        function getTodayID() {
+            let userKey = localStorage.getItem("bbs_user_secret_key");
+            if (!userKey) {
+                userKey = Math.random().toString(36).substring(2, 10);
+                localStorage.setItem("bbs_user_secret_key", userKey);
+            }
+            const now = new Date();
+            const mix = userKey + `${now.getFullYear()}${now.getMonth()+1}${now.getDate()}`;
+            let hash = 0;
+            for (let i = 0; i < mix.length; i++) { hash = (hash << 5) - hash + mix.charCodeAt(i); hash |= 0; }
+            return Math.abs(hash).toString(36).substring(0, 8).toUpperCase();
