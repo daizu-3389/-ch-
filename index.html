@@ -88,8 +88,6 @@
                 margin-bottom: 10px; 
             }
 
-            /* 【修正】スレ開いたときに板メニューを自動非表示にするスタイル（.has の記述）を削除しました */
-
             /* メインコンテンツエリアを画面幅いっぱいに */
             .main-content-box { width: 100%; }
 
@@ -122,6 +120,8 @@
 
     <div class="nav-text">
         <a id="navHomeBtn">■板一覧（ホーム）</a> ＞ <span id="currentLocationDisplay">トップページ</span>
+        <span style="float: right;">👥 現在: <b id="onlineCount">0</b> 人 | <a id="navAdminBtn">⚙️ 管理者部屋</a></span>
+        <div style="clear: both;"></div>
     </div>
 
     <div class="main-container">
@@ -170,13 +170,35 @@
                     </div>
                 </div>
 
+                <div id="adminView" class="view-section">
+                    <div class="board-title" style="color: #000080; border-bottom: 2px solid #000080;">🛠️ 管理者専用 リアルタイム監視ロビー</div>
+                    
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">
+                        <div style="flex: 2; min-width: 300px;">
+                            <h3 style="font-size: 13px; color: #000080; margin: 0 0 5px 0; font-weight: bold;">📋 全掲示板リアルタイムログ (直近50件)</h3>
+                            <div id="adminLogArea" style="background: #fff; border: 1px solid #ccc; padding: 10px; height: 60vh; overflow-y: auto;"></div>
+                        </div>
+                        
+                        <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 15px;">
+                            <div>
+                                <h3 style="font-size: 13px; color: #ff0000; margin: 0 0 5px 0; font-weight: bold;">🚨 荒らし検知アラート (4秒以内の連投)</h3>
+                                <div id="adminAlertArea" style="background: #fff0f0; border: 1px solid #ff0000; padding: 10px; height: 28vh; overflow-y: auto;"></div>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 13px; color: #333; margin: 0 0 5px 0; font-weight: bold;">👥 オンラインID一覧 (<span id="adminOnlineCount">0</span>人)</h3>
+                                <div id="adminUserList" style="background: #fff; border: 1px solid #ccc; padding: 10px; height: 28vh; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, push, onValue, set, onDisconnect, onChildAdded, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
         // 有さんのFirebase設定
         const firebaseConfig = {
@@ -282,7 +304,10 @@
         const welcomeView = document.getElementById("welcomeView");
         const threadListView = document.getElementById("threadListView");
         const threadDetailView = document.getElementById("threadDetailView");
+        const adminView = document.getElementById("adminView");
+
         const navHomeBtn = document.getElementById("navHomeBtn");
+        const navAdminBtn = document.getElementById("navAdminBtn");
         const currentLocationDisplay = document.getElementById("currentLocationDisplay");
         const currentBoardTitleDisplay = document.getElementById("currentBoardTitleDisplay");
         const threadList = document.getElementById("threadList");
@@ -303,6 +328,47 @@
         let postUnsubscribe = null;
 
         // ---------------------------------------------------------
+        // 👥 【リアルタイム同時接続（Presenceシステム）】
+        // ---------------------------------------------------------
+        const myUid = getTodayID();
+        const myPresenceRef = ref(database, 'presence/' + myUid);
+        const connectedRef = ref(database, ".info/connected");
+
+        onValue(connectedRef, (snapshot) => {
+            if (snapshot.val() === true) {
+                set(myPresenceRef, { uid: myUid, lastActive: Date.now() });
+                onDisconnect(myPresenceRef).remove();
+            }
+        });
+
+        const presenceRef = ref(database, 'presence');
+        onValue(presenceRef, (snapshot) => {
+            const data = snapshot.val();
+            const count = data ? Object.keys(data).length : 0;
+            
+            // ヘッダーと管理者部屋の人数をリアルタイム更新
+            document.getElementById("onlineCount").textContent = count;
+            const adminOnlineCount = document.getElementById("adminOnlineCount");
+            const adminUserList = document.getElementById("adminUserList");
+            
+            if (adminOnlineCount && adminUserList) {
+                adminOnlineCount.textContent = count;
+                adminUserList.innerHTML = "";
+                if (data) {
+                    for (let id in data) {
+                        const div = document.createElement("div");
+                        div.style.fontSize = "12px";
+                        div.style.padding = "2px 0";
+                        div.innerHTML = `・ID: <span style="font-family:monospace;font-weight:bold;color:#008000;">${id}</span> ${id === myUid ? '<span style="color:#666;">(あなた)</span>' : ''}`;
+                        adminUserList.appendChild(div);
+                    }
+                } else {
+                    adminUserList.innerHTML = "<div style='color:#666;'>誰もいません</div>";
+                }
+            }
+        });
+
+        // ---------------------------------------------------------
         // 🔒 【名前の一時ロック・管理機能（24時間制限）】
         // ---------------------------------------------------------
         function checkNameLock() {
@@ -311,7 +377,6 @@
             const now = Date.now();
 
             if (lockUntil && parseInt(lockUntil) > now) {
-                // 24時間以内のため名前を固定＆入力不可
                 threadCreatorNameInput.value = lockedName;
                 postNameInput.value = lockedName;
                 threadCreatorNameInput.disabled = true;
@@ -322,7 +387,6 @@
                 threadCreatorNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
                 postNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
             } else {
-                // ロックがかかっていない、または24時間経過した
                 threadCreatorNameInput.disabled = false;
                 postNameInput.disabled = false;
                 if (lockUntil) {
@@ -337,7 +401,7 @@
 
         function lockName(name) {
             const lockUntil = localStorage.getItem("bbs_name_lock_until");
-            if (lockUntil && parseInt(lockUntil) > Date.now()) return; // すでにロック中ならスルー
+            if (lockUntil && parseInt(lockUntil) > Date.now()) return;
 
             const nominatedName = name.trim() || "名無しさん";
             const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
@@ -349,7 +413,7 @@
         }
 
         function saveName(name) {
-            if (threadCreatorNameInput.disabled) return; // ロック時は無効化
+            if (threadCreatorNameInput.disabled) return;
             localStorage.setItem("bbs_saved_username", name);
             threadCreatorNameInput.value = name;
             postNameInput.value = name;
@@ -358,7 +422,6 @@
         threadCreatorNameInput.addEventListener("input", (e) => saveName(e.target.value));
         postNameInput.addEventListener("input", (e) => saveName(e.target.value));
         
-        // 起動時にロック状況を確認して画面に反映
         checkNameLock();
         // ---------------------------------------------------------
 
@@ -413,6 +476,7 @@
             
             welcomeView.classList.remove("active");
             threadDetailView.classList.remove("active");
+            adminView.classList.remove("active");
             threadListView.classList.add("active");
             loadThreadList(boardId);
         }
@@ -424,6 +488,7 @@
             currentLocationDisplay.textContent = "トップページ";
             threadListView.classList.remove("active");
             threadDetailView.classList.remove("active");
+            adminView.classList.remove("active");
             welcomeView.classList.add("active");
         });
 
@@ -462,6 +527,7 @@
             currentThreadTitle.textContent = threadTitle;
             currentLocationDisplay.textContent = threadTitle;
             threadListView.classList.remove("active");
+            adminView.classList.remove("active");
             threadDetailView.classList.add("active");
             
             if (postUnsubscribe) postUnsubscribe();
@@ -498,6 +564,7 @@
 
         backToListViewBtn.addEventListener("click", () => {
             threadDetailView.classList.remove("active");
+            adminView.classList.remove("active");
             threadListView.classList.add("active");
             currentLocationDisplay.textContent = ALL_BOARDS[currentBoardId];
             if (postUnsubscribe) postUnsubscribe();
@@ -521,7 +588,18 @@
             set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
                 push(ref(database, 'posts/' + newThreadId), { name: name, text: firstMsg, time: timeStr, uid: userId });
                 
-                // 🌟 スレ立て成功時にこの名前を24時間ロックする
+                // 📡 管理者配信用グローバルログを保存
+                push(ref(database, 'global_logs'), {
+                    boardName: ALL_BOARDS[currentBoardId],
+                    threadTitle: title,
+                    name: name,
+                    text: firstMsg,
+                    time: timeStr,
+                    uid: userId,
+                    type: "新規スレッド",
+                    timestamp: Date.now()
+                });
+
                 lockName(name);
                 updateLastPostTime();
                 
@@ -538,14 +616,158 @@
             if (!text) return alert("本文を入力してください");
             if (!validatePost(text)) return;
             
-            push(ref(database, 'posts/' + currentThreadId), { name: name, text: text, time: getNowString(), uid: getTodayID() }).then(() => {
+            const timeStr = getNowString();
+            const userId = getTodayID();
+
+            push(ref(database, 'posts/' + currentThreadId), { name: name, text: text, time: timeStr, uid: userId }).then(() => {
                 
-                // 🌟 レス書き込み成功時にこの名前を24時間ロックする
+                // 📡 管理者配信用グローバルログを保存
+                push(ref(database, 'global_logs'), {
+                    boardName: ALL_BOARDS[currentBoardId],
+                    threadTitle: currentThreadTitle.textContent,
+                    name: name,
+                    text: text,
+                    time: timeStr,
+                    uid: userId,
+                    type: "レス",
+                    timestamp: Date.now()
+                });
+
                 lockName(name);
                 updateLastPostTime();
                 postMessageInput.value = "";
             });
         });
+
+        // ---------------------------------------------------------
+        // 🛠️ 【管理者部屋のシステム（監視・荒らし自動検出）】
+        // ---------------------------------------------------------
+        let isAdminAuthenticated = false;
+        let adminLogUnsubscribe = null;
+        let lastPostsByUid = {}; // 各UIDの最終投稿時間を一時保存
+
+        navAdminBtn.addEventListener("click", () => {
+            if (!isAdminAuthenticated) {
+                const pass = prompt("管理者パスワードを入力してください：");
+                if (pass === "hagekasuisibasi427") {
+                    isAdminAuthenticated = true;
+                    alert("認証成功。管理者監視ロビーを開きます。");
+                } else {
+                    alert("パスワードが間違っています。");
+                    return;
+                }
+            }
+
+            // ビュー切り替え
+            welcomeView.classList.remove("active");
+            threadListView.classList.remove("active");
+            threadDetailView.classList.remove("active");
+            adminView.classList.add("active");
+            currentLocationDisplay.textContent = "管理者専用部屋";
+
+            startAdminMonitor();
+        });
+
+        // 警告音を生成して鳴らす関数
+        function playWarningSound() {
+            try {
+                const context = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // 1回目のピ音
+                let osc1 = context.createOscillator();
+                osc1.type = "sine";
+                osc1.frequency.setValueAtTime(660, context.currentTime);
+                osc1.connect(context.destination);
+                osc1.start();
+                osc1.stop(context.currentTime + 0.1);
+
+                // 2回目のピ音 (0.15秒後)
+                setTimeout(() => {
+                    let osc2 = context.createOscillator();
+                    osc2.type = "sine";
+                    osc2.frequency.setValueAtTime(660, context.currentTime);
+                    osc2.connect(context.destination);
+                    osc2.start();
+                    osc2.stop(context.currentTime + 0.1);
+                }, 150);
+            } catch (e) {
+                console.log("AudioContext エラー:", e);
+            }
+        }
+
+        function startAdminMonitor() {
+            if (adminLogUnsubscribe) return; // 既に監視中ならスルー
+
+            const adminLogArea = document.getElementById("adminLogArea");
+            const adminAlertArea = document.getElementById("adminAlertArea");
+
+            adminLogArea.innerHTML = "<div style='color:#666;'>リアルタイムログの読み込みを開始しました...</div>";
+            adminAlertArea.innerHTML = "<div style='color:#666; font-size:12px;'>アラート履歴はありません</div>";
+
+            const logsQuery = query(ref(database, 'global_logs'), limitToLast(50));
+
+            adminLogUnsubscribe = onChildAdded(logsQuery, (snapshot) => {
+                const log = snapshot.val();
+                if (!log) return;
+
+                if (adminLogArea.innerHTML.includes("リアルタイムログの読み込みを開始しました...")) {
+                    adminLogArea.innerHTML = "";
+                }
+
+                // 🚨 荒らし自動検知ロジック (同一UIDによる4秒以内の連続投稿)
+                const now = Date.now();
+                const isRecentLog = (now - log.timestamp) < 15000; // 起動時に過去ログでアラートが鳴るのを防ぐため、15秒以内の新規投稿のみ対象
+                
+                if (lastPostsByUid[log.uid]) {
+                    const prevPost = lastPostsByUid[log.uid];
+                    const timeDiff = log.timestamp - prevPost.timestamp;
+                    
+                    if (timeDiff >= 0 && timeDiff < 4000) { // 4秒以内
+                        if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
+                            adminAlertArea.innerHTML = "";
+                        }
+                        
+                        // 警告ログを作成
+                        const alertDiv = document.createElement("div");
+                        alertDiv.style.backgroundColor = "#fff";
+                        alertDiv.style.border = "1px solid #ff0000";
+                        alertDiv.style.padding = "6px";
+                        alertDiv.style.marginBottom = "5px";
+                        alertDiv.style.fontSize = "12px";
+                        alertDiv.innerHTML = `
+                            <b style="color:red;">⚠️連投検出 (${Math.ceil(timeDiff/1000)}秒間隔)</b><br>
+                            <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
+                            <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
+                            <b>内容:</b> <span style="color:#555;">${log.text.substring(0, 40)}${log.text.length > 40 ? '...' : ''}</span>
+                        `;
+                        adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
+
+                        // リアルタイム検知時のみ警告音を鳴らす
+                        if (isRecentLog) {
+                            playWarningSound();
+                        }
+                    }
+                }
+                // 最終投稿を更新
+                lastPostsByUid[log.uid] = log;
+
+                // 📋 リアルタイム全表示用ログアイテムの作成
+                const logDiv = document.createElement("div");
+                logDiv.style.padding = "6px";
+                logDiv.style.borderBottom = "1px solid #ccc";
+                logDiv.style.fontSize = "12px";
+                logDiv.innerHTML = `
+                    <div style="color:#000080; font-weight:bold;">[${log.time}] 【${log.boardName}】 📄 ${log.threadTitle}</div>
+                    <div style="margin: 2px 0;">
+                        種別: <span style="color:${log.type === '新規スレッド' ? '#ff0000' : '#008000'}; font-weight:bold;">${log.type}</span> | 
+                        投稿者: <b>${log.name}</b> | 
+                        ID: <span style="font-family:monospace; font-weight:bold;">${log.uid}</span>
+                    </div>
+                    <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
+                `;
+                adminLogArea.insertBefore(logDiv, adminLogArea.firstChild);
+            });
+        }
 
         renderBbsMenu();
     </script>
