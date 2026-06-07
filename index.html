@@ -19,23 +19,28 @@
         h1.site-title { color: #ff0000; font-size: 26px; text-align: center; margin: 0; font-weight: bold; }
         .sub-title { font-size: 12px; text-align: center; margin-bottom: 20px; color: #000; }
 
-        /* 🌐 画面1：bbsmenu風のギチギチ板一覧 */
-        .menu-box { background-color: #efefef; border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; }
-        .cat-title { font-weight: bold; color: #af0000; margin-top: 14px; font-size: 13px; border-bottom: 1px dashed #999; padding-bottom: 2px; }
-        .cat-title:first-child { margin-top: 0; }
-        .board-links-area { padding: 6px 0 6px 10px; line-height: 1.9; }
-        .board-link { font-size: 13px; margin-right: 12px; display: inline-block; }
+        /* 🔄 左右2分割レイアウト用のスタイル */
+        .split-container { display: flex; gap: 15px; margin-top: 15px; align-items: flex-start; }
+        
+        /* 📁 左側：常時表示のコンパクト板一覧（サイドバー） */
+        .sidebar-box { width: 220px; flex-shrink: 0; background-color: #efefef; border: 1px solid #ccc; padding: 10px; max-height: 85vh; overflow-y: auto; position: sticky; top: 10px; }
+        .sidebar-box .cat-title { font-weight: bold; color: #af0000; margin-top: 10px; font-size: 12px; border-bottom: 1px dashed #999; padding-bottom: 2px; }
+        .sidebar-box .cat-title:first-child { margin-top: 0; }
+        .sidebar-box .board-links-area { padding: 4px 0 4px 5px; line-height: 1.7; }
+        .sidebar-box .board-link { font-size: 12px; margin-right: 8px; display: inline-block; }
 
-        /* 💬 画面2：スレッド一覧 */
+        /* 📖 右側：メインコンテンツ表示エリア */
+        .main-content-box { flex-grow: 1; min-width: 0; }
+
+        /* 💬 スレッド一覧 */
         .board-title { color: #ff0000; font-size: 20px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
         .thread-list-box { background-color: #fff; border: 1px solid #ccc; padding: 10px; }
         .thread-line { margin-bottom: 6px; font-size: 14px; }
 
-        /* 📖 画面3：スレッド内部（伝統のdt/dd構造） */
+        /* 📖 スレッド内部（伝統のdt/dd構造） */
         .thread-header-title { color: #ff0000; font-size: 22px; font-weight: bold; margin: 10px 0 15px 0; border-bottom: 2px solid #ff0000; padding-bottom: 3px; }
         .posts-box { background-color: #fff; border: 1px solid #ccc; padding: 15px; }
         
-        /* アンカーでジャンプしたときに少し強調するスタイル */
         .post-group { scroll-margin-top: 40px; }
         .post-group:target { background-color: #fff0cc; }
 
@@ -44,7 +49,6 @@
         .post-id { color: #666; font-family: monospace; margin-left: 5px; }
         .post-dd { margin-left: 25px; margin-top: 2px; margin-bottom: 15px; white-space: pre-wrap; word-break: break-all; font-size: 14px; color: #000; }
 
-        /* レスアンカー用のスタイル */
         .res-anchor { color: #0000ff; text-decoration: underline; }
 
         /* 📝 書き込みフォーム */
@@ -56,6 +60,9 @@
         .form-row textarea { width: 100%; max-width: 500px; border: 1px solid #aaa; font-size: 14px; padding: 4px; font-family: inherit; background: #fff; color: #000; }
         .btn-submit { font-size: 12px; font-weight: bold; padding: 2px 15px; cursor: pointer; background: #eee; border: 1px solid #666; color: #000; }
         .btn-submit:hover { background: #ddd; }
+
+        /* 🔒 名前ロック時の見た目（灰色にして操作不可にする） */
+        input:disabled { background-color: #e0e0e0 !important; color: #666 !important; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -68,33 +75,48 @@
         <h1 class="site-title">名無し世界の掲示板</h1>
         <div class="sub-title">つーか、ネットの全住民が集う、完全最軽量リアルタイム2chロビー。</div>
 
-        <div id="homeView" class="view-section active">
-            <div class="menu-box" id="bbsMenuArea"></div>
-        </div>
-
-        <div id="threadListView" class="view-section">
-            <div class="board-title" id="currentBoardTitleDisplay">掲示板</div>
-            <div class="thread-list-box" id="threadList"></div>
-
-            <div class="form-container">
-                <h3>✨ 新しいスレッドを立てる</h3>
-                <div class="form-row"><label>タイトル：</label><input type="text" id="newThreadTitle" placeholder="スレタイを入力"></div>
-                <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName" value="名無しさん"></div>
-                <div class="form-row"><label>内容：</label><textarea id="threadFirstMessage" rows="3" placeholder="最初の書き込み内容"></textarea></div>
-                <button class="btn-submit" id="createThreadBtn">新規スレッド作成</button>
+        <div class="split-container">
+            
+            <div class="sidebar-box">
+                <div style="font-size: 11px; font-weight: bold; margin-bottom: 5px; color: #666; border-bottom: 1px solid #ccc; padding-bottom: 2px;">📁 板メニュー</div>
+                <div id="bbsMenuArea"></div>
             </div>
-        </div>
 
-        <div id="threadDetailView" class="view-section">
-            <a id="backToListViewBtn" style="font-size: 13px; font-weight: bold;">[ 📂 板のスレ一覧に戻る ]</a>
-            <div class="thread-header-title" id="currentThreadTitle">スレッドタイトル</div>
-            <div class="posts-box" id="postList"></div>
+            <div class="main-content-box">
+                
+                <div id="welcomeView" class="view-section active">
+                    <div style="background-color: #fff; border: 1px solid #ccc; padding: 30px; text-align: center; color: #444;">
+                        <p style="font-weight: bold; font-size: 15px; margin: 0 0 10px 0; color: #ff0000;">★ 名無し世界の掲示板へようこそ！ ★</p>
+                        <p style="margin: 0; font-size: 13px;">左側の「板メニュー」から、好きな掲示板を選択してください。</p>
+                    </div>
+                </div>
 
-            <div class="form-container">
-                <h3>このスレッドにレスを書き込む</h3>
-                <div class="form-row"><label>名前：</label><input type="text" id="postName" value="名無しさん"></div>
-                <div class="form-row"><label>本文：</label><textarea id="postMessage" rows="4" placeholder="ここに書き込むメッセージを入力"></textarea></div>
-                <button class="btn-submit" id="sendPostBtn">書き込む</button>
+                <div id="threadListView" class="view-section">
+                    <div class="board-title" id="currentBoardTitleDisplay">掲示板</div>
+                    <div class="thread-list-box" id="threadList"></div>
+
+                    <div class="form-container">
+                        <h3>✨ 新しいスレッドを立てる</h3>
+                        <div class="form-row"><label>タイトル：</label><input type="text" id="newThreadTitle" placeholder="スレタイを入力"></div>
+                        <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName"></div>
+                        <div class="form-row"><label>内容：</label><textarea id="threadFirstMessage" rows="3" placeholder="最初の書き込み内容"></textarea></div>
+                        <button class="btn-submit" id="createThreadBtn">新規スレッド作成</button>
+                    </div>
+                </div>
+
+                <div id="threadDetailView" class="view-section">
+                    <a id="backToListViewBtn" style="font-size: 13px; font-weight: bold;">[ 📂 板のスレ一覧に戻る ]</a>
+                    <div class="thread-header-title" id="currentThreadTitle">スレッドタイトル</div>
+                    <div class="posts-box" id="postList"></div>
+
+                    <div class="form-container">
+                        <h3>このスレッドにレスを書き込む</h3>
+                        <div class="form-row"><label>名前：</label><input type="text" id="postName"></div>
+                        <div class="form-row"><label>本文：</label><textarea id="postMessage" rows="4" placeholder="ここに書き込むメッセージを入力"></textarea></div>
+                        <button class="btn-submit" id="sendPostBtn">書き込む</button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -125,12 +147,10 @@
         const MAX_LENGTH = 500;   // 文字数制限 500文字
 
         function validatePost(text) {
-            // 文字数制限
             if (text.length > MAX_LENGTH) {
                 alert(`長すぎます。${MAX_LENGTH}文字以内で書いてください。`);
                 return false;
             }
-            // 連投制限
             const lastPostTime = localStorage.getItem("bbs_last_post_time");
             const now = Date.now();
             if (lastPostTime && (now - parseInt(lastPostTime) < COOLDOWN_MS)) {
@@ -145,8 +165,6 @@
             localStorage.setItem("bbs_last_post_time", Date.now());
         }
 
-        // 【レスアンカー（>>1など）の変換処理】
-        // XSS対策としてHTMLエスケープを挟んだ後に置換します
         function parsePostText(text) {
             if (!text) return "";
             let escaped = text
@@ -156,7 +174,6 @@
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
             
-            // 「>>数字」をリンク化する正規表現
             return escaped.replace(/&gt;&gt;(\d+)/g, '<a href="#post-$1" class="res-anchor">&gt;&gt;$1</a>');
         }
         // ---------------------------------------------------------
@@ -199,7 +216,7 @@
                 "lonely": "ぼっち・馴れ合い", "mental": "メンタルヘルス", "meikyu": "人生相談", "debt": "借金・生活苦", "job": "転職・就職", "part": "アルバイト", "shikaku": "資格全全", "jinsei": "生き方・人生"
             },
             "■ 各地・地域ローカル": {
-                "hokkaido": "北海道", "tohoku": "東北", "tokyo": "東京", "kanagawa": "神奈川", "tokai": "東海", "kinki": "近畿", "osaka": "大阪", "chugoku": "中国地方", "shikoku": "四国", "kyushu": "九州"
+                "hokkaido": "北海道", "tohoku": "東北", "tokyo": "東京", "kanagawa": "神奈川", "tokai": "東海", "kinki": "近畿", "osaka": "大阪", "chugoku": "中国地方", "shikoku": "四重", "kyushu": "九州"
             }
         };
 
@@ -209,7 +226,7 @@
         }
 
         const bbsMenuArea = document.getElementById("bbsMenuArea");
-        const homeView = document.getElementById("homeView");
+        const welcomeView = document.getElementById("welcomeView");
         const threadListView = document.getElementById("threadListView");
         const threadDetailView = document.getElementById("threadDetailView");
         const navHomeBtn = document.getElementById("navHomeBtn");
@@ -232,17 +249,65 @@
         let threadUnsubscribe = null;
         let postUnsubscribe = null;
 
-        const savedName = localStorage.getItem("bbs_saved_username") || "名無しさん";
-        threadCreatorNameInput.value = savedName;
-        postNameInput.value = savedName;
+        // ---------------------------------------------------------
+        // 🔒 【名前の一時ロック・管理機能（24時間制限）】
+        // ---------------------------------------------------------
+        function checkNameLock() {
+            const lockUntil = localStorage.getItem("bbs_name_lock_until");
+            const lockedName = localStorage.getItem("bbs_locked_username");
+            const now = Date.now();
+
+            if (lockUntil && parseInt(lockUntil) > now) {
+                // 24時間以内のため名前を固定＆入力不可
+                threadCreatorNameInput.value = lockedName;
+                postNameInput.value = lockedName;
+                threadCreatorNameInput.disabled = true;
+                postNameInput.disabled = true;
+                
+                const remainingMs = parseInt(lockUntil) - now;
+                const remainingHours = Math.ceil(remainingMs / (1000 * 60 * 60));
+                threadCreatorNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
+                postNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
+            } else {
+                // ロックがかかっていない、または24時間経過した
+                threadCreatorNameInput.disabled = false;
+                postNameInput.disabled = false;
+                if (lockUntil) {
+                    localStorage.removeItem("bbs_name_lock_until");
+                    localStorage.removeItem("bbs_locked_username");
+                }
+                const savedName = localStorage.getItem("bbs_saved_username") || "名無しさん";
+                threadCreatorNameInput.value = savedName;
+                postNameInput.value = savedName;
+            }
+        }
+
+        function lockName(name) {
+            const lockUntil = localStorage.getItem("bbs_name_lock_until");
+            if (lockUntil && parseInt(lockUntil) > Date.now()) return; // すでにロック中ならスルー
+
+            const nominatedName = name.trim() || "名無しさん";
+            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+            
+            localStorage.setItem("bbs_name_lock_until", Date.now() + TWENTY_FOUR_HOURS);
+            localStorage.setItem("bbs_locked_username", nominatedName);
+            localStorage.setItem("bbs_saved_username", nominatedName);
+            checkNameLock();
+        }
 
         function saveName(name) {
+            if (threadCreatorNameInput.disabled) return; // ロック時は無効化
             localStorage.setItem("bbs_saved_username", name);
             threadCreatorNameInput.value = name;
             postNameInput.value = name;
         }
+
         threadCreatorNameInput.addEventListener("input", (e) => saveName(e.target.value));
         postNameInput.addEventListener("input", (e) => saveName(e.target.value));
+        
+        // 起動時にロック状況を確認して画面に反映
+        checkNameLock();
+        // ---------------------------------------------------------
 
         function getTodayID() {
             let userKey = localStorage.getItem("bbs_user_secret_key");
@@ -292,7 +357,8 @@
             currentBoardId = boardId;
             currentLocationDisplay.textContent = ALL_BOARDS[boardId];
             currentBoardTitleDisplay.textContent = `📂 ${ALL_BOARDS[boardId]} のスレッド一覧`;
-            homeView.classList.remove("active");
+            
+            welcomeView.classList.remove("active");
             threadDetailView.classList.remove("active");
             threadListView.classList.add("active");
             loadThreadList(boardId);
@@ -305,7 +371,7 @@
             currentLocationDisplay.textContent = "トップページ";
             threadListView.classList.remove("active");
             threadDetailView.classList.remove("active");
-            homeView.classList.add("active");
+            welcomeView.classList.add("active");
         });
 
         function loadThreadList(boardId) {
@@ -356,7 +422,6 @@
                     for (let id in data) {
                         const post = data[id];
                         
-                        // アンカーリンクでジャンプできるように全体を一つのグループにする
                         const postGroup = document.createElement("div");
                         postGroup.className = "post-group";
                         postGroup.id = `post-${count}`;
@@ -367,7 +432,6 @@
                         
                         const dd = document.createElement("div");
                         dd.className = "post-dd";
-                        // 本文のアンカーを解析して設定
                         dd.innerHTML = parsePostText(post.text);
                         
                         postGroup.appendChild(dt);
@@ -393,8 +457,6 @@
             const firstMsg = threadFirstMessageInput.value.trim();
             
             if (!title || !firstMsg) return alert("タイトルと内容を入力してね");
-            
-            // 荒らし対策チェック
             if (!validatePost(firstMsg)) return;
 
             const timeStr = getNowString();
@@ -405,7 +467,9 @@
             
             set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
                 push(ref(database, 'posts/' + newThreadId), { name: name, text: firstMsg, time: timeStr, uid: userId });
-                // 投稿成功時に時間を更新
+                
+                // 🌟 スレ立て成功時にこの名前を24時間ロックする
+                lockName(name);
                 updateLastPostTime();
                 
                 newThreadTitleInput.value = "";
@@ -419,12 +483,12 @@
             const text = postMessageInput.value.trim();
             
             if (!text) return alert("本文を入力してください");
-            
-            // 荒らし対策チェック
             if (!validatePost(text)) return;
             
             push(ref(database, 'posts/' + currentThreadId), { name: name, text: text, time: getNowString(), uid: getTodayID() }).then(() => {
-                // 投稿成功時に時間を更新
+                
+                // 🌟 レス書き込み成功時にこの名前を24時間ロックする
+                lockName(name);
                 updateLastPostTime();
                 postMessageInput.value = "";
             });
