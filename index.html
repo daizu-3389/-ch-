@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有のリアルタイム2ch風掲示板</title>
+    <style>
+        body { font-family: "MS PGothic", sans-serif; background-color: #efefef; color: #000; padding: 20px; }
+        h1 { color: #ff0000; font-size: 22px; margin-bottom: 5px; }
+        p { margin-top: 0; font-size: 14px; color: #555; }
+        .form-box { background: #fff; padding: 15px; border: 1px solid #ccc; max-width: 600px; margin-bottom: 20px; }
+        input, textarea { width: 100%; margin-bottom: 10px; padding: 5px; box-sizing: border-box; border: 1px solid #aaa; }
+        button { padding: 8px 20px; background: #e1e1e1; border: 1px solid #aaa; cursor: pointer; font-weight: bold; }
+        button:hover { background: #ccc; }
+        .post-list { max-width: 800px; }
+        .post { background: #fff; padding: 10px; border: 1px solid #ccc; margin-bottom: 10px; border-radius: 4px; }
+        .post-header { color: #228b22; font-size: 13px; font-weight: bold; margin-bottom: 8px; }
+        .post-num { color: #777; font-weight: normal; }
+        .post-body { font-size: 14px; white-space: pre-wrap; color: #000; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <h1>有のリアルタイム2ch風掲示板</h1>
+    <p>※ここに書き込んだ内容は、世界中の同じページを開いている人にリアルタイムで届きます！</p>
+
+    <div class="form-box">
+        <input type="text" id="username" placeholder="名前（省略すると 名無しさん）" value="名無しさん">
+        <textarea id="message" rows="4" placeholder="ここに書き込み内容を入力してね"></textarea>
+        <button id="send-btn">書き込む</button>
+    </div>
+
+    <div id="posts" class="post-list"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        // 有さん専用のFirebase接続設定
+        const firebaseConfig = {
+          apiKey: "AIzaSyALgzyqyzbSLHX8sBCrtN5L7lNDl-c5hAM",
+          authDomain: "my-2ch-bbs.firebaseapp.com",
+          databaseURL: "https://my-2ch-bbs-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "my-2ch-bbs",
+          storageBucket: "my-2ch-bbs.firebasestorage.app",
+          messagingSenderId: "14772039514",
+          appId: "1:14772039514:web:76f3aaf1d7e02fe2a3cd63",
+          measurementId: "G-RKRMPQKV0"
+        };
+
+        // Firebaseとデータベースの初期化
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dbRef = ref(db, "posts"); // 「posts」という名前のフォルダにデータを保存するよ
+
+        // 「書き込む」ボタンを押したときの処理
+        document.getElementById("send-btn").addEventListener("click", () => {
+            const username = document.getElementById("username").value.trim() || "名無しさん";
+            const message = document.getElementById("message").value;
+
+            if (!message.trim()) {
+                alert("内容を入力してください！");
+                return;
+            }
+
+            // ネット上の倉庫（Firebase）にデータを送信！
+            push(dbRef, {
+                username: username,
+                message: message,
+                timestamp: Date.now()
+            });
+
+            // 入力欄を空っぽにする
+            document.getElementById("message").value = "";
+        });
+
+        // 倉庫にデータが追加されたら、自動で画面に表示する処理（リアルタイム！）
+        let postCount = 0;
+        onChildAdded(dbRef, (snapshot) => {
+            postCount++;
+            const postData = snapshot.val();
+            const postsDiv = document.getElementById("posts");
+
+            // 時間の見た目をきれいに変換
+            const postTime = new Date(postData.timestamp).toLocaleString("ja-JP");
+
+            // 新しい投稿のHTML要素を作る
+            const postElement = document.createElement("div");
+            postElement.className = "post";
+            postElement.innerHTML = `
+                <div class="post-header">
+                    <span class="post-num">${postCount}</span> ：<span class="name">${postData.username}</span> ：${postTime}
+                </div>
+                <div class="post-body">${postData.message}</div>
+            `;
+
+            // 最新の書き込みが一番上に来るように画面に追加する
+            postsDiv.insertBefore(postElement, postsDiv.firstChild);
+        });
+    </script>
+</body>
+</html>
