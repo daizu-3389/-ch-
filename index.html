@@ -63,6 +63,58 @@
 
         /* 🔒 名前ロック時の見た目（灰色にして操作不可にする） */
         input:disabled { background-color: #e0e0e0 !important; color: #666 !important; cursor: not-allowed; }
+
+        /* 📱 ──────────────────────────────────────────────────
+           追加：スマートフォン・タブレット向け最適化スタイル
+           ────────────────────────────────────────────────── */
+        /* パディングによる要素のはみ出しを防ぐ基本設定 */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        @media (max-width: 768px) {
+            body { margin: 8px; font-size: 13px; }
+            h1.site-title { font-size: 22px; }
+            .sub-title { font-size: 11px; margin-bottom: 15px; }
+
+            /* 2分割から縦並びの1カラムレイアウトへ変更 */
+            .split-container { flex-direction: column; gap: 10px; margin-top: 10px; }
+            
+            /* 板メニューを横幅いっぱいに広げ、高さを適度に制限してスクロール可能に */
+            .sidebar-box { 
+                width: 100%; 
+                position: static; 
+                max-height: 250px; 
+                margin-bottom: 10px; 
+            }
+
+            /* ★超重要：スレ一覧、またはスレ詳細が表示されている時は、スマホ画面では板メニューを自動非表示 */
+            .split-container:has(#threadListView.active) .sidebar-box,
+            .split-container:has(#threadDetailView.active) .sidebar-box {
+                display: none;
+            }
+
+            /* メインコンテンツエリアを画面幅いっぱいに */
+            .main-content-box { width: 100%; }
+
+            /* レスのインデント（左余白）を浅くして、スマホの狭い画面を有効活用 */
+            .post-dd { margin-left: 10px; margin-top: 4px; }
+
+            /* 書き込みフォームのスマホ最適化（縦並びにしてタップしやすく） */
+            .form-container { width: 100%; max-width: 100%; padding: 12px; }
+            .form-row label { display: block; width: 100%; margin-bottom: 4px; font-size: 13px; }
+            .form-row input[type="text"],
+            .form-row textarea { 
+                width: 100%; 
+                max-width: 100%; 
+                font-size: 15px; /* スマホでの入力時ズーム防止 */
+                padding: 6px;
+            }
+            .btn-submit { 
+                width: 100%; 
+                padding: 8px; 
+                font-size: 14px; 
+                margin-top: 5px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -105,7 +157,7 @@
                 </div>
 
                 <div id="threadDetailView" class="view-section">
-                    <a id="backToListViewBtn" style="font-size: 13px; font-weight: bold;">[ 📂 板のスレ一覧に戻る ]</a>
+                    <div style="margin-bottom: 10px;"><a id="backToListViewBtn" style="font-size: 13px; font-weight: bold;">[ 📂 板のスレ一覧に戻る ]</a></div>
                     <div class="thread-header-title" id="currentThreadTitle">スレッドタイトル</div>
                     <div class="posts-box" id="postList"></div>
 
