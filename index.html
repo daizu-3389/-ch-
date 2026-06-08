@@ -691,9 +691,8 @@
         // 🛠️ 【管理者部屋のシステム（監視・荒らし自動検出）】
         // ---------------------------------------------------------
         let isAdminAuthenticated = false;
-        let adminLogUnsubscribe = null;
-        let adminLogRemovedUnsubscribe = null; 
         let lastPostsByUid = {}; // 各UIDの最終投稿時間を一時保存
+        let adminListeners = []; // 全板・全スレッド監視用リスナーの配列
 
         navAdminBtn.addEventListener("click", () => {
             if (!isAdminAuthenticated) {
@@ -745,7 +744,7 @@
         }
 
         function startAdminMonitor() {
-            if (adminLogUnsubscribe) return; // 既に監視中ならスルー
+            if (adminListeners.length > 0) return; // 既に監視中なら重複設定を防ぐ
 
             const adminLogArea = document.getElementById("adminLogArea");
             const adminAlertArea = document.getElementById("adminAlertArea");
@@ -753,126 +752,172 @@
             adminLogArea.innerHTML = "<div style='color:#666;'>リアルタイムログの読み込みを開始しました...</div>";
             adminAlertArea.innerHTML = "<div style='color:#666; font-size:12px;'>アラート履歴はありません</div>";
 
-            // 【修正】全ての会話を無制限に確認できるよう、件数制限(limitToLast)を外して取得
-            const logsRef = ref(database, 'global_logs');
+            // 📂 データベース全体の『threads』を起点に全メッセージを直接走査・監視する構造へ刷新
+            const threadsRef = ref(database, 'threads');
 
-            adminLogUnsubscribe = onChildAdded(logsRef, (snapshot) => {
-                const log = snapshot.val();
-                if (!log) return;
-                const logKey = snapshot.key; // ログ自身のデータベースキーを取得
-
-                if (adminLogArea.innerHTML.includes("リアルタイムログの読み込みを開始しました...")) {
-                    adminLogArea.innerHTML = "";
-                }
-
-                // 🚨 荒らし自動検知ロジック (同一UIDによる4秒以内の連続投稿)
-                const now = Date.now();
-                const isRecentLog = (now - log.timestamp) < 15000; // 起動時に過去ログでアラートが鳴るのを防ぐため、15秒以内の新規投稿のみ対象
+            // 1. 全ての掲示板を網羅・監視
+            const unsubThreads = onChildAdded(threadsRef, (boardSnapshot) => {
+                const boardId = boardSnapshot.key;
+                const boardName = ALL_BOARDS[boardId] || boardId;
+                const boardThreadsRef = ref(database, 'threads/' + boardId);
                 
-                if (lastPostsByUid[log.uid]) {
-                    const prevPost = lastPostsByUid[log.uid];
-                    const timeDiff = log.timestamp - prevPost.timestamp;
+                // 2. 該当掲示板内の全スレッドを網羅・監視
+                const unsubBoardThreads = onChildAdded(boardThreadsRef, (threadSnapshot) => {
+                    const threadId = threadSnapshot.key;
+                    const threadData = threadSnapshot.val();
+                    const threadTitle = threadData.title || "無題のスレッド";
+                    const postsRef = ref(database, 'posts/' + threadId);
                     
-                    if (timeDiff >= 0 && timeDiff < 4000) { // 4秒以内
-                        if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
-                            adminAlertArea.innerHTML = "";
+                    // 3. 該当スレッド内の全レス（メッセージ）を過去ログ含め全て古い順に発火・監視
+                    const unsubPostsAdded = onChildAdded(postsRef, (postSnapshot) => {
+                        const postKey = postSnapshot.key;
+                        const post = postSnapshot.val();
+                        if (!post) return;
+
+                        if (adminLogArea.innerHTML.includes("リアルタイムログの読み込みを開始しました...")) {
+                            adminLogArea.innerHTML = "";
                         }
+
+                        const logKey = `${threadId}_${postKey}`;
+                        const hasNgWord = NG_WORDS.some(word => (post.text && post.text.includes(word)) || (threadTitle && threadTitle.includes(word)));
+
+                        // 連投検知用の正確なタイムスタンプのパース処理
+                        let logTimestamp = Date.now();
+                        if (post.time) {
+                            const cleanTimeStr = post.time.replace(/\([^-+0-9\s)]+\)/, ''); // "(月)"などの曜日テキストを除去
+                            const parsed = Date.parse(cleanTimeStr);
+                            if (!isNaN(parsed)) logTimestamp = parsed;
+                        }
+
+                        const log = {
+                            boardId: boardId,
+                            boardName: boardName,
+                            threadId: threadId,
+                            postKey: postKey,
+                            threadTitle: threadTitle,
+                            name: post.name || "名無しさん",
+                            text: post.text || "",
+                            time: post.time || "",
+                            uid: post.uid || "???",
+                            timestamp: logTimestamp,
+                            hasNgWord: hasNgWord
+                        };
+
+                        // 🚨 荒らし自動検知ロジック (同一UIDによる4秒以内の連続投稿)
+                        const now = Date.now();
+                        const isRecentLog = (now - log.timestamp) < 30000; // 直近30秒以内の新規書き込みのみ通知音対象
                         
-                        // 警告ログを作成
-                        const alertDiv = document.createElement("div");
-                        alertDiv.id = `admin-alert-${logKey}`;
-                        alertDiv.style.backgroundColor = "#fff";
-                        alertDiv.style.border = "1px solid #ff0000";
-                        alertDiv.style.padding = "6px";
-                        alertDiv.style.marginBottom = "5px";
-                        alertDiv.style.fontSize = "12px";
-                        alertDiv.innerHTML = `
-                            <b style="color:red;">⚠️連投検出 (${Math.ceil(timeDiff/1000)}秒間隔)</b><br>
-                            <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
-                            <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle || log.title || ''}<br>
-                            <b>内容:</b> <span style="color:#555;">${log.text.substring(0, 40)}${log.text.length > 40 ? '...' : ''}</span>
-                            <div style="margin-top: 5px;">
-                                <button class="admin-delete-btn" data-logkey="${logKey}" data-board="${log.boardId || ''}" data-thread="${log.threadId || ''}" data-post="${log.postKey || ''}" data-type="${log.type}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
-                                <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
-                            </div>
-                        `;
-                        adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
+                        if (lastPostsByUid[log.uid]) {
+                            const prevPost = lastPostsByUid[log.uid];
+                            const timeDiff = log.timestamp - prevPost.timestamp;
+                            
+                            if (timeDiff >= 0 && timeDiff < 4000) { // 4秒以内
+                                if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
+                                    adminAlertArea.innerHTML = "";
+                                }
+                                
+                                if (!document.getElementById(`admin-alert-${logKey}`)) {
+                                    const alertDiv = document.createElement("div");
+                                    alertDiv.id = `admin-alert-${logKey}`;
+                                    alertDiv.style.backgroundColor = "#fff";
+                                    alertDiv.style.border = "1px solid #ff0000";
+                                    alertDiv.style.padding = "6px";
+                                    alertDiv.style.marginBottom = "5px";
+                                    alertDiv.style.fontSize = "12px";
+                                    alertDiv.innerHTML = `
+                                        <b style="color:red;">⚠️連投検出 (${Math.ceil(timeDiff/1000)}秒間隔)</b><br>
+                                        <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
+                                        <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
+                                        <b>内容:</b> <span style="color:#555;">${log.text.substring(0, 40)}${log.text.length > 40 ? '...' : ''}</span>
+                                        <div style="margin-top: 5px;">
+                                            <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
+                                            <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
+                                        </div>
+                                    `;
+                                    adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
 
-                        // リアルタイム検知時のみ警告音を鳴らす
-                        if (isRecentLog) {
-                            playWarningSound();
+                                    if (isRecentLog) playWarningSound();
+                                }
+                            }
                         }
-                    }
-                }
 
-                // 🚨 【新設：NGワード検出アラート通知】
-                if (log.hasNgWord) {
-                    if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
-                        adminAlertArea.innerHTML = "";
-                    }
-                    const alertDiv = document.createElement("div");
-                    alertDiv.id = `admin-alert-ng-${logKey}`;
-                    alertDiv.style.backgroundColor = "#fff5f5";
-                    alertDiv.style.border = "2px solid #ff0000";
-                    alertDiv.style.padding = "6px";
-                    alertDiv.style.marginBottom = "5px";
-                    alertDiv.style.fontSize = "12px";
-                    alertDiv.innerHTML = `
-                        <b style="color:red;">🚨 NGワード検出</b><br>
-                        <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
-                        <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle || log.title || ''}<br>
-                        <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
-                        <div style="margin-top: 5px;">
-                            <button class="admin-delete-btn" data-logkey="${logKey}" data-board="${log.boardId || ''}" data-thread="${log.threadId || ''}" data-post="${log.postKey || ''}" data-type="${log.type}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
-                            <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
-                        </div>
-                    `;
-                    adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
-                    
-                    if (isRecentLog) {
-                        playWarningSound();
-                    }
-                }
+                        // 🚨 NGワード検出アラート通知
+                        if (log.hasNgWord) {
+                            if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
+                                adminAlertArea.innerHTML = "";
+                            }
+                            if (!document.getElementById(`admin-alert-ng-${logKey}`)) {
+                                const alertDiv = document.createElement("div");
+                                alertDiv.id = `admin-alert-ng-${logKey}`;
+                                alertDiv.style.backgroundColor = "#fff5f5";
+                                alertDiv.style.border = "2px solid #ff0000";
+                                alertDiv.style.padding = "6px";
+                                alertDiv.style.marginBottom = "5px";
+                                alertDiv.style.fontSize = "12px";
+                                alertDiv.innerHTML = `
+                                    <b style="color:red;">🚨 NGワード検出</b><br>
+                                    <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
+                                    <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
+                                    <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
+                                    <div style="margin-top: 5px;">
+                                        <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
+                                        <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
+                                    </div>
+                                `;
+                                adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
+                                
+                                if (isRecentLog) playWarningSound();
+                            }
+                        }
 
-                // 最終投稿を更新
-                lastPostsByUid[log.uid] = log;
+                        // 最終投稿データを更新
+                        lastPostsByUid[log.uid] = log;
 
-                // 📋 リアルタイム全表示用ログアイテムの作成 (削除用のdata-logkeyおよび固有IDを付与)
-                const logDiv = document.createElement("div");
-                logDiv.id = `admin-log-${logKey}`;
-                logDiv.style.padding = "6px";
-                logDiv.style.borderBottom = "1px solid #ccc";
-                logDiv.style.fontSize = "12px";
-                logDiv.innerHTML = `
-                    <div style="color:#000080; font-weight:bold;">[${log.time}] 【${log.boardName}】 📄 ${log.threadTitle || log.title || ''}</div>
-                    <div style="margin: 2px 0;">
-                        種別: <span style="color:${log.type === '新規スレッド' ? '#ff0000' : '#008000'}; font-weight:bold;">${log.type}</span> | 
-                        投稿者: <b>${log.name}</b> | 
-                        ID: <span style="font-family:monospace; font-weight:bold;">${log.uid}</span>
-                        ${log.hasNgWord ? ' | <b style="color:red;">[NGワード含む]</b>' : ''}
-                    </div>
-                    <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
-                    <div style="margin-top:5px; text-align:right;">
-                        <button class="admin-delete-btn" data-logkey="${logKey}" data-board="${log.boardId || ''}" data-thread="${log.threadId || ''}" data-post="${log.postKey || ''}" data-type="${log.type}" style="font-size:11px; color:red; cursor:pointer;">🗑️ このメッセージを削除</button>
-                        <button class="admin-warn-btn" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
-                    </div>
-                `;
-                adminLogArea.insertBefore(logDiv, adminLogArea.firstChild);
+                        // 📋 リアルタイム全表示用ログアイテムの組み立て表示（最新が上に来る構造）
+                        if (!document.getElementById(`admin-log-${logKey}`)) {
+                            const logDiv = document.createElement("div");
+                            logDiv.id = `admin-log-${logKey}`;
+                            logDiv.style.padding = "6px";
+                            logDiv.style.borderBottom = "1px solid #ccc";
+                            logDiv.style.fontSize = "12px";
+                            logDiv.innerHTML = `
+                                <div style="color:#000080; font-weight:bold;">[${log.time}] 【${log.boardName}】 📄 ${log.threadTitle}</div>
+                                <div style="margin: 2px 0;">
+                                    種別: <span style="color:#008000; font-weight:bold;">書き込み</span> | 
+                                    投稿者: <b>${log.name}</b> | 
+                                    ID: <span style="font-family:monospace; font-weight:bold;">${log.uid}</span>
+                                    ${log.hasNgWord ? ' | <b style="color:red;">[NGワード含む]</b>' : ''}
+                                </div>
+                                <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
+                                <div style="margin-top:5px; text-align:right;">
+                                    <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" style="font-size:11px; color:red; cursor:pointer;">🗑️ このメッセージを削除</button>
+                                    <button class="admin-warn-btn" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
+                                </div>
+                            `;
+                            adminLogArea.insertBefore(logDiv, adminLogArea.firstChild);
+                        }
+                    });
+                    adminListeners.push(unsubPostsAdded);
+
+                    // 📡 データベースからメッセージが削除された際に、管理者画面からもリアルタイム同期消滅させる
+                    const unsubPostsRemoved = onChildRemoved(postsRef, (postSnapshot) => {
+                        const postKey = postSnapshot.key;
+                        const logKey = `${threadId}_${postKey}`;
+                        const logEl = document.getElementById(`admin-log-${logKey}`);
+                        if (logEl) logEl.remove();
+                        const alertEl = document.getElementById(`admin-alert-${logKey}`);
+                        if (alertEl) alertEl.remove();
+                        const alertNgEl = document.getElementById(`admin-alert-ng-${logKey}`);
+                        if (alertNgEl) alertNgEl.remove();
+                    });
+                    adminListeners.push(unsubPostsRemoved);
+                });
+                adminListeners.push(unsubBoardThreads);
             });
-
-            // 📡 【追加】データベースからログが削除された際に、管理者画面のログ一覧からもリアルタイムに消滅させる
-            adminLogRemovedUnsubscribe = onChildRemoved(logsRef, (snapshot) => {
-                const logKey = snapshot.key;
-                const logEl = document.getElementById(`admin-log-${logKey}`);
-                if (logEl) logEl.remove();
-                const alertEl = document.getElementById(`admin-alert-${logKey}`);
-                if (alertEl) alertEl.remove();
-                const alertNgEl = document.getElementById(`admin-alert-ng-${logKey}`);
-                if (alertNgEl) alertNgEl.remove();
-            });
+            adminListeners.push(unsubThreads);
         }
 
-        // 🛠️ 【修正】管理者部屋専用の削除・警告処理アクションリスナー（スマホのタップ判定をclosestで改善）
+        // 🛠️ 管理者部屋専用の削除・警告処理アクションリスナー（スマホ最適化維持）
         document.getElementById("adminView").addEventListener("click", (e) => {
             const deleteBtn = e.target.closest(".admin-delete-btn");
             const warnBtn = e.target.closest(".admin-warn-btn");
@@ -882,28 +927,11 @@
                 const boardId = deleteBtn.getAttribute("data-board");
                 const threadId = deleteBtn.getAttribute("data-thread");
                 const postKey = deleteBtn.getAttribute("data-post");
-                const type = deleteBtn.getAttribute("data-type");
-                const logKey = deleteBtn.getAttribute("data-logkey"); // ログ消去用のキーを取得
 
-                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、リアルタイムに反映されます）")) {
-                    
-                    // 📁 データ参照キー（boardId, threadId）が揃っている場合のみ、元の板・スレッドから書き込みを削除
-                    if (boardId && threadId) {
-                        if (type === "新規スレッド") {
-                            // 新規スレ自体が対象の場合は、スレッド構造と中のレスを丸ごと削除
-                            set(ref(database, 'threads/' + boardId + '/' + threadId), null);
-                            set(ref(database, 'posts/' + threadId), null);
-                        } else {
-                            // レスのみ削除
-                            if (postKey) {
-                                set(ref(database, 'posts/' + threadId + '/' + postKey), null);
-                            }
-                        }
-                    }
-
-                    // 🔒 参照キーが不足している古いデータであっても、管理者ログ（global_logs）からは確実に抹消する
-                    if (logKey) {
-                        set(ref(database, 'global_logs/' + logKey), null);
+                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
+                    if (threadId && postKey) {
+                        // 該当メッセージを直接データベースから完全削除
+                        set(ref(database, 'posts/' + threadId + '/' + postKey), null);
                     }
                     alert("該当のメッセージを削除しました。");
                 }
