@@ -113,6 +113,20 @@
                 font-size: 14px; 
                 margin-top: 5px;
             }
+
+            /* 🛠️ 【追加】管理者部屋のスマホ表示最適化スタイル */
+            #adminView > div[style*="display: flex"] {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+            #adminLogArea { height: 40vh !important; }
+            #adminAlertArea, #adminUserList { height: 25vh !important; }
+            .admin-delete-btn, .admin-warn-btn {
+                padding: 6px 12px !important;
+                font-size: 12px !important;
+                margin: 4px 2px !important;
+                display: inline-block;
+            }
         }
     </style>
 </head>
@@ -126,7 +140,7 @@
 
     <div class="main-container">
         <h1 class="site-title">名無し世界の掲示板</h1>
-        <div class="sub-title">つーか、ネットの全住民が集う、完全最軽量リアルタイム2chロビー。</div>
+        <div class="sub-title">つーか、ネット of 全住民が集う、完全最軽量リアルタイム2chロビー。</div>
 
         <div class="split-container">
             
@@ -858,47 +872,46 @@
             });
         }
 
-        // 🛠️ 【修正】管理者部屋専用の削除・警告処理アクションリスナー
+        // 🛠️ 【修正】管理者部屋専用の削除・警告処理アクションリスナー（スマホのタップ判定をclosestで改善）
         document.getElementById("adminView").addEventListener("click", (e) => {
+            const deleteBtn = e.target.closest(".admin-delete-btn");
+            const warnBtn = e.target.closest(".admin-warn-btn");
+
             // メッセージ削除処理
-            if (e.target.classList.contains("admin-delete-btn")) {
-                const boardId = e.target.getAttribute("data-board");
-                const threadId = e.target.getAttribute("data-thread");
-                const postKey = e.target.getAttribute("data-post");
-                const type = e.target.getAttribute("data-type");
-                const logKey = e.target.getAttribute("data-logkey"); // ログ消去用のキーを取得
+            if (deleteBtn) {
+                const boardId = deleteBtn.getAttribute("data-board");
+                const threadId = deleteBtn.getAttribute("data-thread");
+                const postKey = deleteBtn.getAttribute("data-post");
+                const type = deleteBtn.getAttribute("data-type");
+                const logKey = deleteBtn.getAttribute("data-logkey"); // ログ消去用のキーを取得
 
-                if (!boardId || !threadId) {
-                    alert("削除用のデータ参照キーが不足しています。");
-                    return;
-                }
-
-                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに消滅が反映されます）")) {
-                    if (type === "新規スレッド") {
-                        // 新規スレ自体が対象の場合は、スレッド構造と中のレスを丸ごと削除
-                        set(ref(database, 'threads/' + boardId + '/' + threadId), null);
-                        set(ref(database, 'posts/' + threadId), null);
-                    } else {
-                        // レスのみ削除
-                        if (postKey) {
-                            set(ref(database, 'posts/' + threadId + '/' + postKey), null);
+                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、リアルタイムに反映されます）")) {
+                    
+                    // 📁 データ参照キー（boardId, threadId）が揃っている場合のみ、元の板・スレッドから書き込みを削除
+                    if (boardId && threadId) {
+                        if (type === "新規スレッド") {
+                            // 新規スレ自体が対象の場合は、スレッド構造と中のレスを丸ごと削除
+                            set(ref(database, 'threads/' + boardId + '/' + threadId), null);
+                            set(ref(database, 'posts/' + threadId), null);
                         } else {
-                            alert("ポストキーが見つかりません。");
-                            return;
+                            // レスのみ削除
+                            if (postKey) {
+                                set(ref(database, 'posts/' + threadId + '/' + postKey), null);
+                            }
                         }
                     }
 
-                    // 【修正】管理者部屋のグローバルログ（global_logs）からもデータを完全抹消する
+                    // 🔒 参照キーが不足している古いデータであっても、管理者ログ（global_logs）からは確実に抹消する
                     if (logKey) {
                         set(ref(database, 'global_logs/' + logKey), null);
                     }
-                    alert("該当のメッセージを完全削除しました。");
+                    alert("該当のメッセージを削除しました。");
                 }
             }
 
             // ユーザー警告文送信処理
-            if (e.target.classList.contains("admin-warn-btn")) {
-                const uid = e.target.getAttribute("data-uid");
+            if (warnBtn) {
+                const uid = warnBtn.getAttribute("data-uid");
                 if (!uid) return;
 
                 const warnMsg = prompt(`送信者(ID: ${uid})への警告メッセージ内容を入力してください：`, "不適切な発言（NGワードなど）が検出されました。掲示板のルールを守って書き込みを行ってください。");
