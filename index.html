@@ -251,15 +251,46 @@
         const COOLDOWN_MS = 10000; // クールタイム 10秒
         const MAX_LENGTH = 500;   // 文字数制限 500文字
         
-        // 🔍 【検知範囲を拡大】荒らし、中傷、スパムを広範囲に自動キャッチするNGワードリスト
+        // 🔍 【検知範囲を大幅に拡大】表記揺れ対応を考慮した高密度NGワードマスターリスト
         const NG_WORDS = [
-            "しね", "死ね", "ころす", "殺す", "バカ", "馬鹿", "あらし", "荒らし", 
-            "ゴミ", "カス", "クソ", "ウザい", "ウザイ", "キモい", "キモイ", "がいじ", "ガイジ", 
-            "きちがい", "キチガイ", "はげ", "ハゲ", "売春", "詐欺", "エロ", "パパ活", 
-            "出会い系", "死ねよ", "殺害", "○ね", "キチゲ", "キチ、", "無能", "ガイ、"
+            "しね", "死ね", "ころす", "殺す", "ばか", "馬鹿", "あらし", "荒らし", 
+            "ごみ", "ゴミ", "かす", "カス", "くそ", "クソ", "うざ", "ウザ", "きも", "キモ", 
+            "がいじ", "ガイジ", "きちがい", "キチガイ", "はげ", "ハゲ", "ばいしゅん", "売春", 
+            "さぎ", "詐欺", "えろ", "エロ", "ぱぱかつ", "パパ活", "であいけい", "出会い系", 
+            "さつがい", "殺害", "むのう", "無能", "あほ", "アホ", "まぬけ", "マヌケ", 
+            "ぶす", "ブス", "でぶ", "デブ", "にーと", "ニート", "ごきぶり", "ゴキブリ", 
+            "ちんこ", "まんこ", "せっくす", "さっちゃん", "荒らして", "あらす", "ちん", "まん",
+            "shine", "kill", "baka", "fucking", "fuck", "stalker", "スパム", "すぱむ",
+            "ガイッ", "キチッ", "ガイ", "キチ", "池沼", "ちしょう"
         ];
 
-        // バリデーション（ここでは書き込み自体を禁止する連投制限と文字数制限のみを処理）
+        // 🛡️ どんな表記揺れ（空白、半角、カタカナ）も一網打尽にするテキスト正規化エンジン
+        function normalizeForNgCheck(str) {
+            if (!str) return "";
+            // 1. スペース、改行、タブ、および伏字に使われやすい代表的な記号をすべて消去して密着させる
+            let text = str.toLowerCase().replace(/[\s\s\t\n\r ・○●*＊_＿\-ー,、.。/／]/g, "");
+            // 2. 全角カタカナをひらがなに一括変換
+            text = text.replace(/[\u30a1-\u30f6]/g, function(match) {
+                return String.fromCharCode(match.charCodeAt(0) - 0x60);
+            });
+            // 3. 半角カタカナをひらがなに一括変換
+            const halfKanaMap = {
+                'ｱ':'あ','ｲ':'い','ｳ':'う','ｴ':'え','ｵ':'お','ｶ':'か','ｷ':'き','ｸ':'く','ｹ':'け','ｺ':'こ',
+                'ｻ':'さ','ｼ':'し','ｽ':'す','ｾ':'せ','ｿ':'そ','ﾀ':'た','ﾁ':'ち','ﾂ':'つ','ﾃ':'て','ﾄ':'と',
+                'ﾅ':'な','ﾆ':'に','ﾇ':'ぬ','ﾈ':'ね','ﾉ':'の','ﾊ':'は','ﾋ':'ひ','ﾌ':'ふ','ﾍ':'へ','ﾎ':'ほ',
+                'ﾏ':'ま','ﾐ':'み','ﾑ':'む','ﾒ':'め','ﾓ':'も','ﾔ':'や','ﾕ':'ゆ','ﾖ':'よ','ﾗ':'ら','ﾘ':'り',
+                'ﾙ':'る','ﾚ':'れ','ﾛ':'ろ','ﾜ':'わ','ｦ':'を','ﾝ':'ん',
+                'ｶﾞ':'が','ｷﾞ':'ぎ','ｸﾞ':'ぐ','ｹﾞ':'げ','ｺﾞ':'ご','ｻﾞ':'ざ','ｼﾞ':'じ','ｽﾞ':'ず','ｾﾞ':'ぜ','ｿﾞ':'ぞ',
+                'ﾀﾞ':'だ','ﾁﾞ':'ぢ','ﾂﾞ':'づ','ﾃﾞ':'で','ﾄﾞ':'ど','ﾊﾞ':'ば','ﾋﾞ':'び','ﾌﾞ':'ぶ','ﾍﾞ':'べ','ﾎﾞ':'ぼ',
+                'ﾊﾟ':'ぱ','ﾋﾟ':'ぴ','ﾌﾟ':'ぷ','ﾍﾟ':'ぺ','ﾎﾟ':'ぽ','ｯ':'っ','ｬ':'ゃ','ｭ':'ゅ','ｮ':'ょ'
+            };
+            for (let k in halfKanaMap) {
+                text = text.split(k).join(halfKanaMap[k]);
+            }
+            return text;
+        }
+
+        // バリデーション
         function validatePost(text, title = "") {
             if (text.length > MAX_LENGTH || title.length > MAX_LENGTH) {
                 alert(`長すぎます。${MAX_LENGTH}文字以内で書いてください。`);
@@ -367,7 +398,7 @@
         let threadUnsubscribe = null;
         let postUnsubscribe = null;
 
-        // 👥 【リアルタイム同時接続（Presenceシステム）】
+        // 👥 リアルタイム同時接続
         const myUid = getTodayID();
         const myPresenceRef = ref(database, 'presence/' + myUid);
         const connectedRef = ref(database, ".info/connected");
@@ -405,7 +436,7 @@
             }
         });
 
-        // 👑 【管理者からの警告リアルタイム受信システム】
+        // 👑 管理者からの警告リアルタイム受信
         const myWarningRef = ref(database, 'warnings/' + myUid);
         onValue(myWarningRef, (snapshot) => {
             const data = snapshot.val();
@@ -417,9 +448,7 @@
             }
         });
 
-        // ---------------------------------------------------------
-        // 🔒 【名前の一時ロック・管理機能（24時間制限）】
-        // ---------------------------------------------------------
+        // 🔒 名前の一時ロック・管理機能（24時間制限）
         function checkNameLock() {
             const lockUntil = localStorage.getItem("bbs_name_lock_until");
             const lockedName = localStorage.getItem("bbs_locked_username");
@@ -472,7 +501,6 @@
         postNameInput.addEventListener("input", (e) => saveName(e.target.value));
         
         checkNameLock();
-        // ---------------------------------------------------------
 
         function getTodayID() {
             let userKey = localStorage.getItem("bbs_user_secret_key");
@@ -635,8 +663,10 @@
             const newThreadRef = push(boardThreadsRef);
             const newThreadId = newThreadRef.key;
             
-            // 🚨 自動検知用のNGワード判定
-            const hasNgWord = NG_WORDS.some(word => title.includes(word) || firstMsg.includes(word));
+            // 🚨 強力な正規化を通した高度なNGワード自動チェック
+            const normalizedTitle = normalizeForNgCheck(title);
+            const normalizedMsg = normalizeForNgCheck(firstMsg);
+            const hasNgWord = NG_WORDS.some(word => normalizedTitle.includes(word) || normalizedMsg.includes(word));
 
             set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
                 const newPostRef = push(ref(database, 'posts/' + newThreadId));
@@ -682,8 +712,9 @@
             const newPostRef = push(ref(database, 'posts/' + currentThreadId));
             const postKey = newPostRef.key;
 
-            // 🚨 自動検知用のNGワード判定
-            const hasNgWord = NG_WORDS.some(word => text.includes(word));
+            // 🚨 強力な正規化を通した高度なNGワード自動チェック
+            const normalizedText = normalizeForNgCheck(text);
+            const hasNgWord = NG_WORDS.some(word => normalizedText.includes(word));
 
             set(newPostRef, { name: name, text: text, time: timeStr, uid: userId }).then(() => {
                 push(ref(database, 'global_logs'), {
@@ -759,6 +790,55 @@
             }
         }
 
+        // 📱 PC・スマホ双方で完璧に作動する、削除・警告の直結型高速ハンドラエンジン
+        window.adminDeleteHandler = function(btn) {
+            const boardId = btn.getAttribute("data-board");
+            const threadId = btn.getAttribute("data-thread");
+            const postKey = btn.getAttribute("data-post");
+            const logKey = btn.getAttribute("data-logkey");
+            const isThread = btn.getAttribute("data-is-thread") === "true";
+
+            if (isThread) {
+                if (confirm("【⚠️警告⚠️】\n本当にこのスレッドを『丸ごと削除』しますか？\nスレッド内の全メッセージが完全に消去され元に戻せません。")) {
+                    if (boardId && threadId) {
+                        set(ref(database, 'threads/' + boardId + '/' + threadId), null);
+                        set(ref(database, 'posts/' + threadId), null);
+                        if (logKey) set(ref(database, 'global_logs/' + logKey), null);
+                        alert("スレッドを丸ごと完全削除しました。");
+                        const adminPostListArea = document.getElementById("adminPostListArea");
+                        if (adminPostListArea) {
+                            adminPostListArea.innerHTML = "<div style='color:#666; font-style:italic;'>スレッドを選択するとメッセージ一覧が表示されます。</div>";
+                        }
+                    }
+                }
+            } else {
+                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
+                    if (threadId && postKey) {
+                        set(ref(database, 'posts/' + threadId + '/' + postKey), null);
+                    }
+                    if (logKey) {
+                        set(ref(database, 'global_logs/' + logKey), null);
+                    }
+                    alert("該当のメッセージを削除しました。");
+                }
+            }
+        };
+
+        window.adminWarnHandler = function(btn) {
+            const uid = btn.getAttribute("data-uid");
+            if (!uid) return;
+
+            const warnMsg = prompt(`送信者(ID: ${uid})への警告メッセージ内容を入力してください：`, "不適切な発言（NGワードなど）が検出されました。掲示板のルールを守って書き込みを行ってください。");
+            if (warnMsg) {
+                set(ref(database, 'warnings/' + uid), {
+                    message: warnMsg,
+                    timestamp: Date.now()
+                }).then(() => {
+                    alert("対象ユーザーへのリアルタイム警告シグナルを送信しました。");
+                });
+            }
+        };
+
         function startAdminMonitor() {
             if (adminListeners.length > 0) return; 
 
@@ -782,7 +862,7 @@
 
                 const uniqueId = `${log.threadId}_${log.postKey}`;
                 const hasNgWord = log.hasNgWord;
-                const isThreadType = log.type === "新規スレッド"; // 新規スレ判別フラグ
+                const isThreadType = log.type === "新規スレッド"; 
                 let logTimestamp = log.timestamp || Date.now();
 
                 const now = Date.now();
@@ -812,8 +892,8 @@
                                 <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
                                 <b>内容:</b> <span style="color:#555;">${log.text.substring(0, 40)}${log.text.length > 40 ? '...' : ''}</span>
                                 <div style="margin-top: 5px;">
-                                    <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
-                                    <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
+                                    <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
+                                    <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
                                 </div>
                             `;
                             adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
@@ -842,8 +922,8 @@
                             <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
                             <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
                             <div style="margin-top: 5px;">
-                                <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
-                                <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
+                                <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
+                                <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
                             </div>
                         `;
                         adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
@@ -870,8 +950,8 @@
                         </div>
                         <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
                         <div style="margin-top:5px; text-align:right;">
-                            <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="font-size:11px; color:red; cursor:pointer;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ このメッセージを削除'}</button>
-                            <button class="admin-warn-btn" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
+                            <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="font-size:11px; color:red; cursor:pointer;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ このメッセージを削除'}</button>
+                            <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
                         </div>
                     `;
                     adminLogArea.insertBefore(logDiv, adminLogArea.firstChild);
@@ -905,58 +985,6 @@
             });
             adminListeners.push(unsubLogRemoved);
         }
-
-        document.getElementById("adminView").addEventListener("click", (e) => {
-            const deleteBtn = e.target.closest(".admin-delete-btn");
-            const warnBtn = e.target.closest(".admin-warn-btn");
-
-            if (deleteBtn) {
-                const boardId = deleteBtn.getAttribute("data-board");
-                const threadId = deleteBtn.getAttribute("data-thread");
-                const postKey = deleteBtn.getAttribute("data-post");
-                const logKey = deleteBtn.getAttribute("data-logkey");
-                const isThread = deleteBtn.getAttribute("data-is-thread") === "true"; // スレごと削除かどうかの判定
-
-                if (isThread) {
-                    // 📁 スレッド丸ごと完全消去処理
-                    if (confirm("【⚠️警告⚠️】\n本当にこのスレッドを『丸ごと削除』しますか？\nスレッド内の全メッセージが完全に消去され元に戻せません。")) {
-                        if (boardId && threadId) {
-                            set(ref(database, 'threads/' + boardId + '/' + threadId), null);
-                            set(ref(database, 'posts/' + threadId), null);
-                            if (logKey) set(ref(database, 'global_logs/' + logKey), null);
-                            alert("スレッドを丸ごと完全削除しました。");
-                            document.getElementById("adminPostListArea").innerHTML = "<div style='color:#666; font-style:italic;'>スレッドを選択するとメッセージ一覧が表示されます。</div>";
-                        }
-                    }
-                } else {
-                    // 💬 単一レスの削除処理
-                    if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
-                        if (threadId && postKey) {
-                            set(ref(database, 'posts/' + threadId + '/' + postKey), null);
-                        }
-                        if (logKey) {
-                            set(ref(database, 'global_logs/' + logKey), null);
-                        }
-                        alert("該当のメッセージを削除しました。");
-                    }
-                }
-            }
-
-            if (warnBtn) {
-                const uid = warnBtn.getAttribute("data-uid");
-                if (!uid) return;
-
-                const warnMsg = prompt(`送信者(ID: ${uid})への警告メッセージ内容を入力してください：`, "不適切な発言（NGワードなど）が検出されました。掲示板のルールを守って書き込みを行ってください。");
-                if (warnMsg) {
-                    set(ref(database, 'warnings/' + uid), {
-                        message: warnMsg,
-                        timestamp: Date.now()
-                    }).then(() => {
-                        alert("対象ユーザーへのリアルタイム警告シグナルを送信しました。");
-                    });
-                }
-            }
-        });
 
         // ---------------------------------------------------------
         // 🛠️ 板別スレッド・メッセージ巡回ブラウザの制御ロジック
@@ -1046,7 +1074,7 @@
                 titleDiv.style.marginBottom = "8px";
                 titleDiv.style.borderBottom = "2px solid #ff0000";
                 titleDiv.style.paddingBottom = "5px";
-                titleDiv.innerHTML = `📌 スレ: ${threadTitle} <button class="admin-delete-btn" data-board="${boardId}" data-thread="${threadId}" data-post="" data-logkey="" data-is-thread="true" style="font-size:11px; color:#fff; background-color:#ff0000; border:1px solid #cc0000; font-weight:bold; cursor:pointer; margin-left:15px; padding:2px 6px;">🗑️ このスレを丸ごと削除</button>`;
+                titleDiv.innerHTML = `📌 スレ: ${threadTitle} <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${boardId}" data-thread="${threadId}" data-post="" data-logkey="" data-is-thread="true" style="font-size:11px; color:#fff; background-color:#ff0000; border:1px solid #cc0000; font-weight:bold; cursor:pointer; margin-left:15px; padding:2px 6px;">🗑️ このスレを丸ごと削除</button>`;
                 adminPostListArea.appendChild(titleDiv);
 
                 const data = snapshot.val();
@@ -1066,8 +1094,8 @@
                             </div>
                             <div style="margin: 4px 0 4px 10px; white-space: pre-wrap; word-break: break-all; font-size:13px; color:#000;">${post.text}</div>
                             <div style="text-align: right; margin-top:3px;">
-                                <button class="admin-delete-btn" data-board="${boardId}" data-thread="${threadId}" data-post="${id}" data-logkey="" data-is-thread="false" style="font-size:10px; color:red; font-weight:bold; cursor:pointer; padding:1px 5px;">🗑️ 削除</button>
-                                <button class="admin-warn-btn" data-uid="${post.uid || ''}" style="font-size:10px; color:orange; font-weight:bold; cursor:pointer; padding:1px 5px; margin-left:5px;">⚠️ 警告</button>
+                                <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${boardId}" data-thread="${threadId}" data-post="${id}" data-logkey="" data-is-thread="false" style="font-size:10px; color:red; font-weight:bold; cursor:pointer; padding:1px 5px;">🗑️ 削除</button>
+                                <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${post.uid || ''}" style="font-size:10px; color:orange; font-weight:bold; cursor:pointer; padding:1px 5px; margin-left:5px;">⚠️ 警告</button>
                             </div>
                         `;
                         adminPostListArea.appendChild(div);
