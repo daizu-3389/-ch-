@@ -162,7 +162,7 @@
                     <div class="form-container">
                         <h3>✨ 新しいスレッドを立てる</h3>
                         <div class="form-row"><label>タイトル：</label><input type="text" id="newThreadTitle" placeholder="スレタイを入力"></div>
-                        <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName"></div>
+                        <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName"><span id="threadNameLockMsg" style="font-size:11px; color:#cc0000; margin-left:8px; font-weight:bold;"></span></div>
                         <div class="form-row"><label>内容：</label><textarea id="threadFirstMessage" rows="3" placeholder="最初の書き込み内容"></textarea></div>
                         <button class="btn-submit" id="createThreadBtn">新規スレッド作成</button>
                     </div>
@@ -175,7 +175,7 @@
 
                     <div class="form-container">
                         <h3>このスレッドにレスを書き込む</h3>
-                        <div class="form-row"><label>名前：</label><input type="text" id="postName"></div>
+                        <div class="form-row"><label>名前：</label><input type="text" id="postName"><span id="postNameLockMsg" style="font-size:11px; color:#cc0000; margin-left:8px; font-weight:bold;"></span></div>
                         <div class="form-row"><label>本文：</label><textarea id="postMessage" rows="4" placeholder="ここに書き込むメッセージを入力"></textarea></div>
                         <button class="btn-submit" id="sendPostBtn">書き込む</button>
                     </div>
@@ -453,20 +453,28 @@
             const lockUntil = localStorage.getItem("bbs_name_lock_until");
             const lockedName = localStorage.getItem("bbs_locked_username");
             const now = Date.now();
+            const threadLockMsg = document.getElementById("threadNameLockMsg");
+            const postLockMsg = document.getElementById("postNameLockMsg");
 
             if (lockUntil && parseInt(lockUntil) > now) {
                 threadCreatorNameInput.value = lockedName;
                 postNameInput.value = lockedName;
                 threadCreatorNameInput.disabled = true;
                 postNameInput.disabled = true;
-                
+
                 const remainingMs = parseInt(lockUntil) - now;
-                const remainingHours = Math.ceil(remainingMs / (1000 * 60 * 60));
-                threadCreatorNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
-                postNameInput.title = `名前は24時間ロックされています（残り約${remainingHours}時間）`;
+                const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                const remainingMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                const lockLabel = `🔒 あと${remainingHours}時間${remainingMins}分変更不可`;
+                threadCreatorNameInput.title = lockLabel;
+                postNameInput.title = lockLabel;
+                if (threadLockMsg) threadLockMsg.textContent = lockLabel;
+                if (postLockMsg) postLockMsg.textContent = lockLabel;
             } else {
                 threadCreatorNameInput.disabled = false;
                 postNameInput.disabled = false;
+                if (threadLockMsg) threadLockMsg.textContent = "";
+                if (postLockMsg) postLockMsg.textContent = "";
                 if (lockUntil) {
                     localStorage.removeItem("bbs_name_lock_until");
                     localStorage.removeItem("bbs_locked_username");
@@ -476,6 +484,9 @@
                 postNameInput.value = savedName;
             }
         }
+
+        // 1分ごとにロック残り時間を更新
+        setInterval(checkNameLock, 60000);
 
         function lockName(name) {
             const lockUntil = localStorage.getItem("bbs_name_lock_until");
