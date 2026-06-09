@@ -950,7 +950,8 @@
                         </div>
                         <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
                         <div style="margin-top:5px; text-align:right;">
-                            <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="font-size:11px; color:red; cursor:pointer;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ このメッセージを削除'}</button>
+                            ${!isThreadType ? `<button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="false" style="font-size:11px; color:red; cursor:pointer;">🗑️ このメッセージを削除</button>` : ''}
+                            <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="" data-logkey="${logKey}" data-is-thread="true" style="font-size:11px; color:#fff; background:#cc0000; border:1px solid #990000; border-radius:2px; cursor:pointer; margin-left:4px; padding:2px 6px; font-weight:bold;">🗑️ スレッドごと削除</button>
                             <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
                         </div>
                     `;
@@ -1044,7 +1045,20 @@
                             const a = document.createElement("a");
                             a.textContent = `${index}: ${thread.title}`;
                             a.style.fontWeight = "bold";
-                            
+                            a.style.cursor = "pointer";
+
+                            const delBtn = document.createElement("button");
+                            delBtn.textContent = "🗑️ 削除";
+                            delBtn.className = "admin-delete-btn";
+                            delBtn.setAttribute("data-board", boardId);
+                            delBtn.setAttribute("data-thread", id);
+                            delBtn.setAttribute("data-post", "");
+                            delBtn.setAttribute("data-logkey", "");
+                            delBtn.setAttribute("data-is-thread", "true");
+                            delBtn.style.cssText = "float:right; font-size:10px; color:#fff; background:#cc0000; border:1px solid #990000; border-radius:2px; cursor:pointer; padding:1px 6px; font-weight:bold; margin-left:6px;";
+                            delBtn.onclick = function(e) { e.stopPropagation(); window.adminDeleteHandler(this); };
+
+                            div.appendChild(delBtn);
                             div.appendChild(a);
                             div.addEventListener("click", () => loadAdminPosts(boardId, id, thread.title));
                             adminThreadListArea.appendChild(div);
