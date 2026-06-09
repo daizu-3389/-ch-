@@ -1,0 +1,11 @@
+{
+  "name": "ch-board-frontend",
+  "version": "1.0.0",
+  "description": "静的フロントエンドサーバー",
+  "scripts": {
+    "start": "serve . -p 5000 -s"
+  },
+  "dependencies": {
+    "serve": "^14.2.3"
+  }
+}
