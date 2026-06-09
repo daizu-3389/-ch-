@@ -251,8 +251,13 @@
         const COOLDOWN_MS = 10000; // クールタイム 10秒
         const MAX_LENGTH = 500;   // 文字数制限 500文字
         
-        // 自動検知を作動させたいNGワードの一覧（自由に増やせます）
-        const NG_WORDS = ["しね", "バカ", "殺す", "荒らし", "ngword1", "ngword2"];
+        // 🔍 【検知範囲を拡大】荒らし、中傷、スパムを広範囲に自動キャッチするNGワードリスト
+        const NG_WORDS = [
+            "しね", "死ね", "ころす", "殺す", "バカ", "馬鹿", "あらし", "荒らし", 
+            "ゴミ", "カス", "クソ", "ウザい", "ウザイ", "キモい", "キモイ", "がいじ", "ガイジ", 
+            "きちがい", "キチガイ", "はげ", "ハゲ", "売春", "詐欺", "エロ", "パパ活", 
+            "出会い系", "死ねよ", "殺害", "○ね", "キチゲ", "キチ、", "無能", "ガイ、"
+        ];
 
         // バリデーション（ここでは書き込み自体を禁止する連投制限と文字数制限のみを処理）
         function validatePost(text, title = "") {
@@ -630,7 +635,7 @@
             const newThreadRef = push(boardThreadsRef);
             const newThreadId = newThreadRef.key;
             
-            // 🚨 【修正・自動検知】書き込みは禁止せず、タイトル・本文にNGワードが入っているか判定
+            // 🚨 自動検知用のNGワード判定
             const hasNgWord = NG_WORDS.some(word => title.includes(word) || firstMsg.includes(word));
 
             set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
@@ -650,7 +655,7 @@
                         uid: userId,
                         type: "新規スレッド",
                         timestamp: Date.now(),
-                        hasNgWord: hasNgWord // 管理者部屋の検知稼働フラグ
+                        hasNgWord: hasNgWord
                     });
                 });
 
@@ -677,7 +682,7 @@
             const newPostRef = push(ref(database, 'posts/' + currentThreadId));
             const postKey = newPostRef.key;
 
-            // 🚨 【修正・自動検知】書き込みは禁止せず、本文にNGワードが入っているか判定
+            // 🚨 自動検知用のNGワード判定
             const hasNgWord = NG_WORDS.some(word => text.includes(word));
 
             set(newPostRef, { name: name, text: text, time: timeStr, uid: userId }).then(() => {
@@ -693,7 +698,7 @@
                     uid: userId,
                     type: "レス",
                     timestamp: Date.now(),
-                    hasNgWord: hasNgWord // 管理者部屋の検知稼働フラグ
+                    hasNgWord: hasNgWord
                 });
 
                 lockName(name);
@@ -777,6 +782,7 @@
 
                 const uniqueId = `${log.threadId}_${log.postKey}`;
                 const hasNgWord = log.hasNgWord;
+                const isThreadType = log.type === "新規スレッド"; // 新規スレ判別フラグ
                 let logTimestamp = log.timestamp || Date.now();
 
                 const now = Date.now();
@@ -806,7 +812,7 @@
                                 <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
                                 <b>内容:</b> <span style="color:#555;">${log.text.substring(0, 40)}${log.text.length > 40 ? '...' : ''}</span>
                                 <div style="margin-top: 5px;">
-                                    <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
+                                    <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
                                     <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
                                 </div>
                             `;
@@ -836,7 +842,7 @@
                             <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
                             <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
                             <div style="margin-top: 5px;">
-                                <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">🗑️ メッセージ削除</button>
+                                <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
                                 <button class="admin-warn-btn" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
                             </div>
                         `;
@@ -864,7 +870,7 @@
                         </div>
                         <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
                         <div style="margin-top:5px; text-align:right;">
-                            <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" style="font-size:11px; color:red; cursor:pointer;">🗑️ このメッセージを削除</button>
+                            <button class="admin-delete-btn" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="font-size:11px; color:red; cursor:pointer;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ このメッセージを削除'}</button>
                             <button class="admin-warn-btn" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
                         </div>
                     `;
@@ -909,15 +915,30 @@
                 const threadId = deleteBtn.getAttribute("data-thread");
                 const postKey = deleteBtn.getAttribute("data-post");
                 const logKey = deleteBtn.getAttribute("data-logkey");
+                const isThread = deleteBtn.getAttribute("data-is-thread") === "true"; // スレごと削除かどうかの判定
 
-                if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
-                    if (threadId && postKey) {
-                        set(ref(database, 'posts/' + threadId + '/' + postKey), null);
+                if (isThread) {
+                    // 📁 スレッド丸ごと完全消去処理
+                    if (confirm("【⚠️警告⚠️】\n本当にこのスレッドを『丸ごと削除』しますか？\nスレッド内の全メッセージが完全に消去され元に戻せません。")) {
+                        if (boardId && threadId) {
+                            set(ref(database, 'threads/' + boardId + '/' + threadId), null);
+                            set(ref(database, 'posts/' + threadId), null);
+                            if (logKey) set(ref(database, 'global_logs/' + logKey), null);
+                            alert("スレッドを丸ごと完全削除しました。");
+                            document.getElementById("adminPostListArea").innerHTML = "<div style='color:#666; font-style:italic;'>スレッドを選択するとメッセージ一覧が表示されます。</div>";
+                        }
                     }
-                    if (logKey) {
-                        set(ref(database, 'global_logs/' + logKey), null);
+                } else {
+                    // 💬 単一レスの削除処理
+                    if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
+                        if (threadId && postKey) {
+                            set(ref(database, 'posts/' + threadId + '/' + postKey), null);
+                        }
+                        if (logKey) {
+                            set(ref(database, 'global_logs/' + logKey), null);
+                        }
+                        alert("該当のメッセージを削除しました。");
                     }
-                    alert("該当のメッセージを削除しました。");
                 }
             }
 
@@ -1018,13 +1039,14 @@
             adminPostUnsubscribe = onValue(postsRef, (snapshot) => {
                 adminPostListArea.innerHTML = "";
                 
+                // 📁 スレッド丸ごと削除ができる専用の共通ボタンヘッダーを生成
                 const titleDiv = document.createElement("div");
                 titleDiv.style.fontWeight = "bold";
                 titleDiv.style.color = "#ff0000";
                 titleDiv.style.marginBottom = "8px";
                 titleDiv.style.borderBottom = "2px solid #ff0000";
-                titleDiv.style.paddingBottom = "3px";
-                titleDiv.textContent = `📌 スレ: ${threadTitle}`;
+                titleDiv.style.paddingBottom = "5px";
+                titleDiv.innerHTML = `📌 スレ: ${threadTitle} <button class="admin-delete-btn" data-board="${boardId}" data-thread="${threadId}" data-post="" data-logkey="" data-is-thread="true" style="font-size:11px; color:#fff; background-color:#ff0000; border:1px solid #cc0000; font-weight:bold; cursor:pointer; margin-left:15px; padding:2px 6px;">🗑️ このスレを丸ごと削除</button>`;
                 adminPostListArea.appendChild(titleDiv);
 
                 const data = snapshot.val();
@@ -1044,7 +1066,7 @@
                             </div>
                             <div style="margin: 4px 0 4px 10px; white-space: pre-wrap; word-break: break-all; font-size:13px; color:#000;">${post.text}</div>
                             <div style="text-align: right; margin-top:3px;">
-                                <button class="admin-delete-btn" data-board="${boardId}" data-thread="${threadId}" data-post="${id}" data-logkey="" style="font-size:10px; color:red; font-weight:bold; cursor:pointer; padding:1px 5px;">🗑️ 削除</button>
+                                <button class="admin-delete-btn" data-board="${boardId}" data-thread="${threadId}" data-post="${id}" data-logkey="" data-is-thread="false" style="font-size:10px; color:red; font-weight:bold; cursor:pointer; padding:1px 5px;">🗑️ 削除</button>
                                 <button class="admin-warn-btn" data-uid="${post.uid || ''}" style="font-size:10px; color:orange; font-weight:bold; cursor:pointer; padding:1px 5px; margin-left:5px;">⚠️ 警告</button>
                             </div>
                         `;
