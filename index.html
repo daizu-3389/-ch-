@@ -40,7 +40,7 @@
         /* 📖 スレッド内部（伝統のdt/dd構造） */
         .thread-header-title { color: #ff0000; font-size: 22px; font-weight: bold; margin: 10px 0 15px 0; border-bottom: 2px solid #ff0000; padding-bottom: 3px; }
         
-        /* 【修正】レス一覧をスクロール可能にして、書き込みフォームが隠れないように調整 */
+        /* レス一覧をスクロール可能にして、書き込みフォームが隠れないように調整 */
         .posts-box { background-color: #fff; border: 1px solid #ccc; padding: 15px; max-height: 55vh; overflow-y: auto; }
         
         .post-group { scroll-margin-top: 40px; }
@@ -66,10 +66,7 @@
         /* 🔒 名前ロック時の見た目（灰色にして操作不可にする） */
         input:disabled { background-color: #e0e0e0 !important; color: #666 !important; cursor: not-allowed; }
 
-        /* 📱 ──────────────────────────────────────────────────
-           追加：スマートフォン・タブレット向け最適化スタイル
-           ────────────────────────────────────────────────── */
-        /* パディングによる要素のはみ出しを防ぐ基本設定 */
+        /* 📱 スマートフォン・タブレット向け最適化スタイル */
         *, *::before, *::after { box-sizing: border-box; }
 
         @media (max-width: 768px) {
@@ -94,7 +91,7 @@
             /* レスのインデント（左余白）を浅くして、スマホの狭い画面を有効活用 */
             .post-dd { margin-left: 10px; margin-top: 4px; }
 
-            /* 【修正】スマホ表示時はキーボードが出て狭くなるため、レス一覧の高さを一回りコンパクトに調整 */
+            /* スマホ表示時はキーボードが出て狭くなるため、レス一覧の高さを一回りコンパクトに調整 */
             .posts-box { max-height: 35vh; }
 
             /* 書き込みフォームのスマホ最適化（縦並びにしてタップしやすく） */
@@ -104,7 +101,7 @@
             .form-row textarea { 
                 width: 100%; 
                 max-width: 100%; 
-                font-size: 15px; /* スマホでの入力時ズーム防止 */
+                font-size: 15px; 
                 padding: 6px;
             }
             .btn-submit { 
@@ -114,7 +111,7 @@
                 margin-top: 5px;
             }
 
-            /* 🛠️ 【追加】管理者部屋のスマホ表示最適化スタイル */
+            /* 🛠️ 管理者部屋のスマホ表示最適化スタイル */
             #adminView > div[style*="display: flex"] {
                 flex-direction: column !important;
                 gap: 10px !important;
@@ -249,17 +246,21 @@
         const database = getDatabase(app);
 
         // ---------------------------------------------------------
-        // 【荒らし対策の設定】
+        // 🚨 【NGワードおよび荒らし対策の定義設定】
         // ---------------------------------------------------------
         const COOLDOWN_MS = 10000; // クールタイム 10秒
         const MAX_LENGTH = 500;   // 文字数制限 500文字
-        const NG_WORDS = ["ngword1", "ngword2", "しね", "バカ", "殺す", "荒らし"]; // 検出したいNGワードのリストを追加
+        
+        // 自動検知を作動させたいNGワードの一覧（自由に増やせます）
+        const NG_WORDS = ["しね", "バカ", "殺す", "荒らし", "ngword1", "ngword2"];
 
-        function validatePost(text) {
-            if (text.length > MAX_LENGTH) {
+        // バリデーション（ここでは書き込み自体を禁止する連投制限と文字数制限のみを処理）
+        function validatePost(text, title = "") {
+            if (text.length > MAX_LENGTH || title.length > MAX_LENGTH) {
                 alert(`長すぎます。${MAX_LENGTH}文字以内で書いてください。`);
                 return false;
             }
+
             const lastPostTime = localStorage.getItem("bbs_last_post_time");
             const now = Date.now();
             if (lastPostTime && (now - parseInt(lastPostTime) < COOLDOWN_MS)) {
@@ -361,9 +362,7 @@
         let threadUnsubscribe = null;
         let postUnsubscribe = null;
 
-        // ---------------------------------------------------------
         // 👥 【リアルタイム同時接続（Presenceシステム）】
-        // ---------------------------------------------------------
         const myUid = getTodayID();
         const myPresenceRef = ref(database, 'presence/' + myUid);
         const connectedRef = ref(database, ".info/connected");
@@ -380,7 +379,6 @@
             const data = snapshot.val();
             const count = data ? Object.keys(data).length : 0;
             
-            // ヘッダーと管理者部屋の人数をリアルタイム更新
             document.getElementById("onlineCount").textContent = count;
             const adminOnlineCount = document.getElementById("adminOnlineCount");
             const adminUserList = document.getElementById("adminUserList");
@@ -407,10 +405,9 @@
         onValue(myWarningRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                // 直近1分以内に配信された警告のみ表示
                 if (Date.now() - data.timestamp < 60000) {
                     alert(`🚨【管理者からの警告通知】🚨\n\n${data.message}`);
-                    set(myWarningRef, null); // 重複表示防止のため確認後データベースから削除
+                    set(myWarningRef, null); 
                 }
             }
         });
@@ -618,13 +615,14 @@
             currentThreadId = null;
         });
 
+        // ✨ スレッド新規作成
         createThreadBtn.addEventListener("click", () => {
             const title = newThreadTitleInput.value.trim();
             const name = threadCreatorNameInput.value.trim() || "名無しさん";
             const firstMsg = threadFirstMessageInput.value.trim();
             
             if (!title || !firstMsg) return alert("タイトルと内容を入力してね");
-            if (!validatePost(firstMsg)) return;
+            if (!validatePost(firstMsg, title)) return;
 
             const timeStr = getNowString();
             const userId = getTodayID();
@@ -632,7 +630,7 @@
             const newThreadRef = push(boardThreadsRef);
             const newThreadId = newThreadRef.key;
             
-            // NGワード検出のチェック
+            // 🚨 【修正・自動検知】書き込みは禁止せず、タイトル・本文にNGワードが入っているか判定
             const hasNgWord = NG_WORDS.some(word => title.includes(word) || firstMsg.includes(word));
 
             set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
@@ -640,7 +638,6 @@
                 const postKey = newPostRef.key;
 
                 set(newPostRef, { name: name, text: firstMsg, time: timeStr, uid: userId }).then(() => {
-                    // 📡 管理者配信用グローバルログを保存 (削除特定用の各種キーとNGワードフラグを追加)
                     push(ref(database, 'global_logs'), {
                         boardId: currentBoardId,
                         boardName: ALL_BOARDS[currentBoardId],
@@ -653,7 +650,7 @@
                         uid: userId,
                         type: "新規スレッド",
                         timestamp: Date.now(),
-                        hasNgWord: hasNgWord
+                        hasNgWord: hasNgWord // 管理者部屋の検知稼働フラグ
                     });
                 });
 
@@ -666,6 +663,7 @@
             });
         });
 
+        // 💬 レス書き込み
         sendPostBtn.addEventListener("click", () => {
             const name = postNameInput.value.trim() || "名無しさん";
             const text = postMessageInput.value.trim();
@@ -679,12 +677,10 @@
             const newPostRef = push(ref(database, 'posts/' + currentThreadId));
             const postKey = newPostRef.key;
 
-            // NGワード検出のチェック
+            // 🚨 【修正・自動検知】書き込みは禁止せず、本文にNGワードが入っているか判定
             const hasNgWord = NG_WORDS.some(word => text.includes(word));
 
             set(newPostRef, { name: name, text: text, time: timeStr, uid: userId }).then(() => {
-                
-                // 📡 管理者配信用グローバルログを保存 (削除特定用の各種キーとNGワードフラグを追加)
                 push(ref(database, 'global_logs'), {
                     boardId: currentBoardId,
                     boardName: ALL_BOARDS[currentBoardId],
@@ -697,7 +693,7 @@
                     uid: userId,
                     type: "レス",
                     timestamp: Date.now(),
-                    hasNgWord: hasNgWord
+                    hasNgWord: hasNgWord // 管理者部屋の検知稼働フラグ
                 });
 
                 lockName(name);
@@ -710,8 +706,8 @@
         // 🛠️ 【管理者部屋のシステム（監視・荒らし自動検出）】
         // ---------------------------------------------------------
         let isAdminAuthenticated = false;
-        let lastPostsByUid = {}; // 各UIDの最終投稿時間を一時保存
-        let adminListeners = []; // 全監視用リスナーの配列
+        let lastPostsByUid = {}; 
+        let adminListeners = []; 
 
         navAdminBtn.addEventListener("click", () => {
             if (!isAdminAuthenticated) {
@@ -725,7 +721,6 @@
                 }
             }
 
-            // ビュー切り替え
             welcomeView.classList.remove("active");
             threadListView.classList.remove("active");
             threadDetailView.classList.remove("active");
@@ -735,12 +730,10 @@
             startAdminMonitor();
         });
 
-        // 警告音を生成して鳴らす関数
         function playWarningSound() {
             try {
                 const context = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // 1回目のピ音
                 let osc1 = context.createOscillator();
                 osc1.type = "sine";
                 osc1.frequency.setValueAtTime(660, context.currentTime);
@@ -748,7 +741,6 @@
                 osc1.start();
                 osc1.stop(context.currentTime + 0.1);
 
-                // 2回目のピ音 (0.15秒後)
                 setTimeout(() => {
                     let osc2 = context.createOscillator();
                     osc2.type = "sine";
@@ -763,7 +755,7 @@
         }
 
         function startAdminMonitor() {
-            if (adminListeners.length > 0) return; // 既に監視中なら重複設定を防ぐ
+            if (adminListeners.length > 0) return; 
 
             const adminLogArea = document.getElementById("adminLogArea");
             const adminAlertArea = document.getElementById("adminAlertArea");
@@ -771,12 +763,11 @@
             adminLogArea.innerHTML = "<div style='color:#666;'>リアルタイムログの読み込みを開始しました...</div>";
             adminAlertArea.innerHTML = "<div style='color:#666; font-size:12px;'>アラート履歴はありません</div>";
 
-            // 📡 データベースの一元ログ『global_logs』を起点に効率よく監視（インポート済みの query と limitToLast を有効活用）
             const globalLogsRef = ref(database, 'global_logs');
-            const logsQuery = query(globalLogsRef, limitToLast(100)); // 直近100件をリアルタイム監視
+            const logsQuery = query(globalLogsRef, limitToLast(100)); 
 
             const unsubLogAdded = onChildAdded(logsQuery, (snapshot) => {
-                const logKey = snapshot.key; // global_logsの固有識別キー
+                const logKey = snapshot.key; 
                 const log = snapshot.val();
                 if (!log) return;
 
@@ -788,15 +779,15 @@
                 const hasNgWord = log.hasNgWord;
                 let logTimestamp = log.timestamp || Date.now();
 
-                // 🚨 荒らし自動検知ロジック (同一UIDによる4秒以内の連続投稿)
                 const now = Date.now();
-                const isRecentLog = (now - logTimestamp) < 30000; // 直近30秒以内の新規書き込みのみ通知音対象
+                const isRecentLog = (now - logTimestamp) < 30000; 
                 
+                // 連投検出アラート
                 if (lastPostsByUid[log.uid]) {
                     const prevPost = lastPostsByUid[log.uid];
                     const timeDiff = logTimestamp - prevPost.timestamp;
                     
-                    if (timeDiff >= 0 && timeDiff < 4000) { // 4秒以内
+                    if (timeDiff >= 0 && timeDiff < 4000) { 
                         if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
                             adminAlertArea.innerHTML = "";
                         }
@@ -826,7 +817,7 @@
                     }
                 }
 
-                // 🚨 NGワード検出アラート通知
+                // NGワード検出アラート
                 if (hasNgWord) {
                     if (adminAlertArea.innerHTML.includes("アラート履歴はありません")) {
                         adminAlertArea.innerHTML = "";
@@ -855,10 +846,8 @@
                     }
                 }
 
-                // 最終投稿データを更新
                 lastPostsByUid[log.uid] = { timestamp: logTimestamp };
 
-                // 📋 リアルタイム全表示用ログアイテムの組み立て表示（最新が上に来る構造）
                 if (!document.getElementById(`admin-log-${uniqueId}`)) {
                     const logDiv = document.createElement("div");
                     logDiv.id = `admin-log-${uniqueId}`;
@@ -882,7 +871,6 @@
                     adminLogArea.insertBefore(logDiv, adminLogArea.firstChild);
                 }
 
-                // 📡 データベースから一般のメッセージが削除された際に、管理者画面からもリアルタイム同期消滅させる
                 const postRef = ref(database, `posts/${log.threadId}/${log.postKey}`);
                 const unsubPostValue = onValue(postRef, (postSnapshot) => {
                     if (!postSnapshot.exists()) {
@@ -898,7 +886,6 @@
             });
             adminListeners.push(unsubLogAdded);
 
-            // global_logs 側の直接削除にも同期
             const unsubLogRemoved = onChildRemoved(globalLogsRef, (snapshot) => {
                 const log = snapshot.val();
                 if (!log) return;
@@ -913,12 +900,10 @@
             adminListeners.push(unsubLogRemoved);
         }
 
-        // 🛠️ 管理者部屋専用の削除・警告処理アクションリスナー（スマホ最適化維持）
         document.getElementById("adminView").addEventListener("click", (e) => {
             const deleteBtn = e.target.closest(".admin-delete-btn");
             const warnBtn = e.target.closest(".admin-warn-btn");
 
-            // メッセージ削除処理
             if (deleteBtn) {
                 const boardId = deleteBtn.getAttribute("data-board");
                 const threadId = deleteBtn.getAttribute("data-thread");
@@ -927,18 +912,15 @@
 
                 if (confirm("本当にこのメッセージを削除しますか？\n（データベースから完全に消去され、一般画面にもリアルタイムに反映されます）")) {
                     if (threadId && postKey) {
-                        // 該当メッセージを直接データベースから完全削除
                         set(ref(database, 'posts/' + threadId + '/' + postKey), null);
                     }
                     if (logKey) {
-                        // 一元ログの該当データも同期削除
                         set(ref(database, 'global_logs/' + logKey), null);
                     }
                     alert("該当のメッセージを削除しました。");
                 }
             }
 
-            // ユーザー警告文送信処理
             if (warnBtn) {
                 const uid = warnBtn.getAttribute("data-uid");
                 if (!uid) return;
@@ -956,7 +938,7 @@
         });
 
         // ---------------------------------------------------------
-        // 🛠️ 【追加】管理者用 板別スレッド・メッセージ巡回ブラウザの制御ロジック
+        // 🛠️ 板別スレッド・メッセージ巡回ブラウザの制御ロジック
         // ---------------------------------------------------------
         let adminThreadUnsubscribe = null;
         let adminPostUnsubscribe = null;
@@ -968,7 +950,6 @@
 
             if (!adminBoardSelect) return;
 
-            // セレクトボックスに定義済みの板データを分類ごとに出力
             adminBoardSelect.innerHTML = "<option value=''>-- 板を選択してください --</option>";
             for (let cat in BOARD_DATA) {
                 const group = document.createElement("optgroup");
@@ -985,7 +966,6 @@
             adminThreadListArea.innerHTML = "<div style='color:#666; font-style:italic;'>板を選択するとスレッド一覧が表示されます。</div>";
             adminPostListArea.innerHTML = "<div style='color:#666; font-style:italic;'>スレッドを選択するとメッセージ一覧が表示されます。</div>";
 
-            // 板切り替えイベント
             adminBoardSelect.addEventListener("change", (e) => {
                 const boardId = e.target.value;
                 if (adminThreadUnsubscribe) adminThreadUnsubscribe();
@@ -1038,7 +1018,6 @@
             adminPostUnsubscribe = onValue(postsRef, (snapshot) => {
                 adminPostListArea.innerHTML = "";
                 
-                // ヘッダー（選択中のスレッドタイトル）
                 const titleDiv = document.createElement("div");
                 titleDiv.style.fontWeight = "bold";
                 titleDiv.style.color = "#ff0000";
