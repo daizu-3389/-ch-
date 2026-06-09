@@ -192,7 +192,15 @@
                         
                         <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 15px;">
                             <div>
-                                <h3 style="font-size: 13px; color: #ff0000; margin: 0 0 5px 0; font-weight: bold;">🚨 荒らし・NGワード検知アラート</h3>
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                                    <h3 style="font-size: 13px; color: #ff0000; margin: 0; font-weight: bold;">🚨 荒らし・NGワード検知アラート</h3>
+                                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:11px; font-weight:bold; color:#333; user-select:none;">
+                                        <div id="autoNgToggleWrap" style="position:relative; width:38px; height:20px; background:#ccc; border-radius:10px; transition:background 0.2s; flex-shrink:0;">
+                                            <div id="autoNgToggleKnob" style="position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:left 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                                        </div>
+                                        <span id="autoNgToggleLabel" style="color:#999;">自動処理: OFF</span>
+                                    </label>
+                                </div>
                                 <div id="adminAlertArea" style="background: #fff0f0; border: 1px solid #ff0000; padding: 10px; height: 28vh; overflow-y: auto;"></div>
                             </div>
                             <div>
@@ -801,6 +809,35 @@
             }
         }
 
+        // 🔀 NGワード自動処理トグルスイッチの初期化
+        window.autoNgMode = localStorage.getItem("bbs_admin_auto_ng") === "true";
+
+        function applyAutoNgToggleUI() {
+            const wrap = document.getElementById("autoNgToggleWrap");
+            const knob = document.getElementById("autoNgToggleKnob");
+            const label = document.getElementById("autoNgToggleLabel");
+            if (!wrap) return;
+            if (window.autoNgMode) {
+                wrap.style.background = "#cc0000";
+                knob.style.left = "20px";
+                label.textContent = "自動処理: ON";
+                label.style.color = "#cc0000";
+            } else {
+                wrap.style.background = "#ccc";
+                knob.style.left = "2px";
+                label.textContent = "自動処理: OFF";
+                label.style.color = "#999";
+            }
+        }
+
+        document.getElementById("autoNgToggleWrap").addEventListener("click", () => {
+            window.autoNgMode = !window.autoNgMode;
+            localStorage.setItem("bbs_admin_auto_ng", window.autoNgMode);
+            applyAutoNgToggleUI();
+        });
+
+        applyAutoNgToggleUI();
+
         // 📱 PC・スマホ双方で完璧に作動する、削除・警告の直結型高速ハンドラエンジン
         window.adminDeleteHandler = function(btn) {
             const boardId = btn.getAttribute("data-board");
@@ -920,25 +957,55 @@
                         adminAlertArea.innerHTML = "";
                     }
                     if (!document.getElementById(`admin-alert-ng-${uniqueId}`)) {
-                        const alertDiv = document.createElement("div");
-                        alertDiv.id = `admin-alert-ng-${uniqueId}`;
-                        alertDiv.style.backgroundColor = "#fff5f5";
-                        alertDiv.style.border = "2px solid #ff0000";
-                        alertDiv.style.padding = "6px";
-                        alertDiv.style.marginBottom = "5px";
-                        alertDiv.style.fontSize = "12px";
-                        alertDiv.innerHTML = `
-                            <b style="color:red;">🚨 NGワード検出</b><br>
-                            <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
-                            <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
-                            <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
-                            <div style="margin-top: 5px;">
-                                <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
-                                <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
-                            </div>
-                        `;
-                        adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
-                        
+                        // 🤖 自動処理モードの場合は即時削除＋警告
+                        if (window.autoNgMode && isRecentLog) {
+                            if (log.threadId && log.postKey) {
+                                set(ref(database, 'posts/' + log.threadId + '/' + log.postKey), null);
+                            }
+                            if (logKey) set(ref(database, 'global_logs/' + logKey), null);
+                            if (log.uid) {
+                                set(ref(database, 'warnings/' + log.uid), {
+                                    message: "NGワードを含む書き込みが自動検出・削除されました。掲示板のルールを守って書き込みを行ってください。",
+                                    timestamp: Date.now()
+                                });
+                            }
+                            const alertDiv = document.createElement("div");
+                            alertDiv.id = `admin-alert-ng-${uniqueId}`;
+                            alertDiv.style.backgroundColor = "#f0fff0";
+                            alertDiv.style.border = "2px solid #00aa00";
+                            alertDiv.style.padding = "6px";
+                            alertDiv.style.marginBottom = "5px";
+                            alertDiv.style.fontSize = "12px";
+                            alertDiv.innerHTML = `
+                                <b style="color:#008000;">✅ 自動処理完了</b><br>
+                                <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
+                                <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
+                                <b>内容:</b> <span style="color:#b30000;">${log.text}</span><br>
+                                <span style="color:#008000; font-size:11px;">🗑️ 自動削除済み ／ ⚠️ 警告送信済み</span>
+                            `;
+                            adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
+                        } else {
+                            // 手動モード：ボタンを表示
+                            const alertDiv = document.createElement("div");
+                            alertDiv.id = `admin-alert-ng-${uniqueId}`;
+                            alertDiv.style.backgroundColor = "#fff5f5";
+                            alertDiv.style.border = "2px solid #ff0000";
+                            alertDiv.style.padding = "6px";
+                            alertDiv.style.marginBottom = "5px";
+                            alertDiv.style.fontSize = "12px";
+                            alertDiv.innerHTML = `
+                                <b style="color:red;">🚨 NGワード検出</b><br>
+                                <b>ID:</b> <span style="font-family:monospace;">${log.uid}</span> | <b>名前:</b> ${log.name}<br>
+                                <b>場所:</b> ${log.boardName} ＞ ${log.threadTitle}<br>
+                                <b>内容:</b> <span style="color:#b30000; font-weight:bold;">${log.text}</span>
+                                <div style="margin-top: 5px;">
+                                    <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="color:red; font-weight:bold; cursor:pointer; font-size:11px;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ メッセージ削除'}</button>
+                                    <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="color:orange; font-weight:bold; cursor:pointer; font-size:11px; margin-left:10px;">⚠️ 送信者へ警告</button>
+                                </div>
+                            `;
+                            adminAlertArea.insertBefore(alertDiv, adminAlertArea.firstChild);
+                        }
+
                         if (isRecentLog) playWarningSound();
                     }
                 }
