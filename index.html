@@ -300,13 +300,22 @@
 
         // バリデーション
         function validatePost(text, title = "") {
+            const now = Date.now();
+
+            // 🚨 警告BAN チェック（30秒）
+            const warnedUntil = localStorage.getItem("bbs_warned_until");
+            if (warnedUntil && parseInt(warnedUntil) > now) {
+                const waitSec = Math.ceil((parseInt(warnedUntil) - now) / 1000);
+                alert(`⚠️ 警告を受けたため、書き込みが制限されています。\nあと ${waitSec} 秒後に書き込めます。`);
+                return false;
+            }
+
             if (text.length > MAX_LENGTH || title.length > MAX_LENGTH) {
                 alert(`長すぎます。${MAX_LENGTH}文字以内で書いてください。`);
                 return false;
             }
 
             const lastPostTime = localStorage.getItem("bbs_last_post_time");
-            const now = Date.now();
             if (lastPostTime && (now - parseInt(lastPostTime) < COOLDOWN_MS)) {
                 const waitTime = Math.ceil((COOLDOWN_MS - (now - parseInt(lastPostTime))) / 1000);
                 alert(`連投制限中です。あと${waitTime}秒待ってね。`);
@@ -450,8 +459,10 @@
             const data = snapshot.val();
             if (data) {
                 if (Date.now() - data.timestamp < 60000) {
-                    alert(`🚨【管理者からの警告通知】🚨\n\n${data.message}`);
-                    set(myWarningRef, null); 
+                    const banUntil = Date.now() + 30000;
+                    localStorage.setItem("bbs_warned_until", banUntil);
+                    alert(`🚨【管理者からの警告通知】🚨\n\n${data.message}\n\n⏱️ この通知を受け取ったため、30秒間は書き込みができません。`);
+                    set(myWarningRef, null);
                 }
             }
         });
