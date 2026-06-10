@@ -63,6 +63,11 @@
         .btn-submit { font-size: 12px; font-weight: bold; padding: 2px 15px; cursor: pointer; background: #eee; border: 1px solid #666; color: #000; }
         .btn-submit:hover { background: #ddd; }
 
+        /* 🔍 スレッド検索ボックス */
+        .thread-search-box { width: 100%; box-sizing: border-box; padding: 4px 8px; font-size: 13px; border: 1px solid #aaa; margin-bottom: 8px; background: #fff; color: #000; }
+        /* 🖼️ 投稿画像 */
+        .post-img { max-width: 100%; max-height: 300px; display: block; margin-top: 6px; border: 1px solid #ccc; cursor: pointer; }
+        .res-count { font-size: 11px; color: #666; margin-left: 8px; }
         /* 🔒 名前ロック時の見た目（灰色にして操作不可にする） */
         input:disabled { background-color: #e0e0e0 !important; color: #666 !important; cursor: not-allowed; }
 
@@ -157,6 +162,7 @@
 
                 <div id="threadListView" class="view-section">
                     <div class="board-title" id="currentBoardTitleDisplay">掲示板</div>
+                    <input type="search" id="threadSearchInput" class="thread-search-box" placeholder="🔍 スレッドを検索...">
                     <div class="thread-list-box" id="threadList"></div>
 
                     <div class="form-container">
@@ -164,6 +170,7 @@
                         <div class="form-row"><label>タイトル：</label><input type="text" id="newThreadTitle" placeholder="スレタイを入力"></div>
                         <div class="form-row"><label>名前：</label><input type="text" id="threadCreatorName"><span id="threadNameLockMsg" style="font-size:11px; color:#cc0000; margin-left:8px; font-weight:bold;"></span></div>
                         <div class="form-row"><label>内容：</label><textarea id="threadFirstMessage" rows="3" placeholder="最初の書き込み内容"></textarea></div>
+                        <div class="form-row"><label>画像：</label><input type="file" id="threadImageInput" accept="image/*" style="font-size:12px;"><span style="font-size:11px; color:#666; margin-left:4px;">3MBまで</span></div>
                         <button class="btn-submit" id="createThreadBtn">新規スレッド作成</button>
                     </div>
                 </div>
@@ -177,6 +184,7 @@
                         <h3>このスレッドにレスを書き込む</h3>
                         <div class="form-row"><label>名前：</label><input type="text" id="postName"><span id="postNameLockMsg" style="font-size:11px; color:#cc0000; margin-left:8px; font-weight:bold;"></span></div>
                         <div class="form-row"><label>本文：</label><textarea id="postMessage" rows="4" placeholder="ここに書き込むメッセージを入力"></textarea></div>
+                        <div class="form-row"><label>画像：</label><input type="file" id="postImageInput" accept="image/*" style="font-size:12px;"><span style="font-size:11px; color:#666; margin-left:4px;">3MBまで</span></div>
                         <button class="btn-submit" id="sendPostBtn">書き込む</button>
                     </div>
                 </div>
@@ -236,7 +244,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, push, onValue, set, onDisconnect, onChildAdded, onChildRemoved, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, push, onValue, set, onDisconnect, onChildAdded, onChildRemoved, query, limitToLast, get, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
         // 有さんのFirebase設定
         const firebaseConfig = {
@@ -597,33 +605,75 @@
             welcomeView.classList.add("active");
         });
 
+        let allThreadData = {}; // 検索フィルタ用キャッシュ
+        let currentSearchBoardId = "";
+
+        function renderThreadList(data, filter) {
+            threadList.innerHTML = "";
+            if (!data || Object.keys(data).length === 0) {
+                threadList.innerHTML = "<div style='color:#666; font-size:12px;'>スレッドがありません。</div>";
+                return;
+            }
+            const kw = filter ? filter.toLowerCase() : "";
+            let index = 1;
+            for (let id in data) {
+                const thread = data[id];
+                if (kw && !thread.title.toLowerCase().includes(kw)) { index++; continue; }
+                const div = document.createElement("div");
+                div.className = "thread-line";
+
+                const a = document.createElement("a");
+                a.textContent = thread.title;
+                a.style.cursor = "pointer";
+                a.addEventListener("click", () => openThread(id, thread.title));
+
+                const countSpan = document.createElement("span");
+                countSpan.className = "res-count";
+                countSpan.textContent = thread.replyCount ? `[${thread.replyCount}res]` : "[1res]";
+
+                div.appendChild(document.createTextNode(`${index}: `));
+                div.appendChild(a);
+                div.appendChild(countSpan);
+                threadList.appendChild(div);
+                index++;
+            }
+            if (threadList.innerHTML === "") {
+                threadList.innerHTML = "<div style='color:#666; font-size:12px;'>該当するスレッドがありません。</div>";
+            }
+        }
+
         function loadThreadList(boardId) {
             if (threadUnsubscribe) threadUnsubscribe();
+            currentSearchBoardId = boardId;
             threadList.innerHTML = "<div style='color:#666; font-size:12px;'>読み込み中...</div>";
+            const searchInput = document.getElementById("threadSearchInput");
+            if (searchInput) searchInput.value = "";
             const threadsRef = ref(database, 'threads/' + boardId);
             threadUnsubscribe = onValue(threadsRef, (snapshot) => {
-                threadList.innerHTML = "";
-                const data = snapshot.val();
-                if (data) {
-                    let index = 1;
-                    for (let id in data) {
-                        const thread = data[id];
-                        const div = document.createElement("div");
-                        div.className = "thread-line";
-                        
-                        const a = document.createElement("a");
-                        a.textContent = thread.title;
-                        a.style.cursor = "pointer";
-                        a.addEventListener("click", () => openThread(id, thread.title));
-                        
-                        div.appendChild(document.createTextNode(`${index}: `));
-                        div.appendChild(a);
-                        threadList.appendChild(div);
-                        index++;
-                    }
-                } else {
-                    threadList.innerHTML = "<div style='color:#666; font-size:12px;'>スレッドがありません。</div>";
+                allThreadData = snapshot.val() || {};
+                const kw = searchInput ? searchInput.value : "";
+                renderThreadList(allThreadData, kw);
+            });
+        }
+
+        // 検索入力イベント
+        document.getElementById("threadSearchInput").addEventListener("input", (e) => {
+            renderThreadList(allThreadData, e.target.value);
+        });
+
+        // 🖼️ 画像ファイル → base64 変換（3MB制限）
+        function readImageFile(fileInput) {
+            return new Promise((resolve) => {
+                const file = fileInput.files[0];
+                if (!file) return resolve(null);
+                if (file.size > 3 * 1024 * 1024) {
+                    alert("画像は3MB以下にしてください。");
+                    fileInput.value = "";
+                    return resolve(null);
                 }
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(file);
             });
         }
 
@@ -657,9 +707,18 @@
                         const dd = document.createElement("div");
                         dd.className = "post-dd";
                         dd.innerHTML = parsePostText(post.text);
-                        
+
                         postGroup.appendChild(dt);
                         postGroup.appendChild(dd);
+
+                        if (post.imageData) {
+                            const img = document.createElement("img");
+                            img.src = post.imageData;
+                            img.className = "post-img";
+                            img.onclick = () => window.open(post.imageData, "_blank");
+                            postGroup.appendChild(img);
+                        }
+
                         postList.appendChild(postGroup);
                         count++;
                     }
@@ -696,11 +755,16 @@
             const normalizedMsg = normalizeForNgCheck(firstMsg);
             const hasNgWord = NG_WORDS.some(word => normalizedTitle.includes(word) || normalizedMsg.includes(word));
 
-            set(newThreadRef, { title: title, createdAt: timeStr }).then(() => {
+            const threadImgInput = document.getElementById("threadImageInput");
+            readImageFile(threadImgInput).then(imgData => {
+
+            set(newThreadRef, { title: title, createdAt: timeStr, replyCount: 1 }).then(() => {
                 const newPostRef = push(ref(database, 'posts/' + newThreadId));
                 const postKey = newPostRef.key;
+                const postData = { name: name, text: firstMsg, time: timeStr, uid: userId };
+                if (imgData) postData.imageData = imgData;
 
-                set(newPostRef, { name: name, text: firstMsg, time: timeStr, uid: userId }).then(() => {
+                set(newPostRef, postData).then(() => {
                     push(ref(database, 'global_logs'), {
                         boardId: currentBoardId,
                         boardName: ALL_BOARDS[currentBoardId],
@@ -722,8 +786,12 @@
                 
                 newThreadTitleInput.value = "";
                 threadFirstMessageInput.value = "";
+                if (threadImgInput) threadImgInput.value = "";
                 openThread(newThreadId, title);
             });
+        });
+
+            }); // readImageFile
         });
 
         // 💬 レス書き込み
@@ -737,6 +805,9 @@
             const timeStr = getNowString();
             const userId = getTodayID();
 
+            const postImgInput = document.getElementById("postImageInput");
+            readImageFile(postImgInput).then(imgData => {
+
             const newPostRef = push(ref(database, 'posts/' + currentThreadId));
             const postKey = newPostRef.key;
 
@@ -744,7 +815,10 @@
             const normalizedText = normalizeForNgCheck(text);
             const hasNgWord = NG_WORDS.some(word => normalizedText.includes(word));
 
-            set(newPostRef, { name: name, text: text, time: timeStr, uid: userId }).then(() => {
+            const postData = { name: name, text: text, time: timeStr, uid: userId };
+            if (imgData) postData.imageData = imgData;
+
+            set(newPostRef, postData).then(() => {
                 push(ref(database, 'global_logs'), {
                     boardId: currentBoardId,
                     boardName: ALL_BOARDS[currentBoardId],
@@ -763,7 +837,12 @@
                 lockName(name);
                 updateLastPostTime();
                 postMessageInput.value = "";
+                if (postImgInput) postImgInput.value = "";
+                // レス数カウントアップ
+                set(ref(database, 'threads/' + currentBoardId + '/' + currentThreadId + '/replyCount'), increment(1));
             });
+
+            }); // readImageFile
         });
 
         // ---------------------------------------------------------
