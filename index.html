@@ -244,7 +244,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, push, onValue, set, onDisconnect, onChildAdded, onChildRemoved, query, limitToLast, get, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, push, onValue, set, update, onDisconnect, onChildAdded, onChildRemoved, query, limitToLast, get, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
         // 有さんのFirebase設定
         const firebaseConfig = {
@@ -838,7 +838,7 @@
                 postMessageInput.value = "";
                 if (postImgInput) postImgInput.value = "";
                 // レス数カウントアップ
-                set(ref(database, 'threads/' + currentBoardId + '/' + currentThreadId + '/replyCount'), increment(1));
+                update(ref(database, 'threads/' + currentBoardId + '/' + currentThreadId), { replyCount: increment(1) });
             });
 
             }); // readImageFile
