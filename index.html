@@ -51,7 +51,23 @@
         .post-id { color: #666; font-family: monospace; margin-left: 5px; }
         .post-dd { margin-left: 25px; margin-top: 2px; margin-bottom: 15px; white-space: pre-wrap; word-break: break-all; font-size: 14px; color: #000; }
 
-        .res-anchor { color: #0000ff; text-decoration: underline; }
+        .res-anchor { color: #0000ff; text-decoration: underline; cursor: pointer; }
+        /* 🔍 レスプレビューポップアップ */
+        #res-preview-popup {
+            display: none; position: fixed; z-index: 5000;
+            background: #fffff0; border: 1px solid #999; padding: 8px 10px;
+            max-width: 380px; min-width: 200px; font-size: 12px;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.25);
+            pointer-events: none; line-height: 1.5;
+        }
+        #res-preview-popup.visible { display: block; }
+        #res-preview-popup .rp-dt { color: #333; margin-bottom: 4px; border-bottom: 1px dashed #bbb; padding-bottom: 3px; }
+        #res-preview-popup .rp-dt b { color: #008000; }
+        #res-preview-popup .rp-dd { color: #000; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow: hidden; }
+        body.dark #res-preview-popup { background: #1e2a1e; border-color: #555; color: #ccc; }
+        body.dark #res-preview-popup .rp-dt { color: #aaa; border-color: #444; }
+        body.dark #res-preview-popup .rp-dt b { color: #66bb66; }
+        body.dark #res-preview-popup .rp-dd { color: #ccc; }
 
         /* 📝 書き込みフォーム */
         .form-container { background-color: #efefef; border: 1px solid #ccc; padding: 10px; margin-top: 20px; max-width: 600px; }
@@ -381,7 +397,7 @@
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
             
-            return escaped.replace(/&gt;&gt;(\d+)/g, '<a href="#post-$1" class="res-anchor">&gt;&gt;$1</a>');
+            return escaped.replace(/&gt;&gt;(\d+)/g, '<a class="res-anchor" data-resnum="$1">&gt;&gt;$1</a>');
         }
         // ---------------------------------------------------------
 
@@ -712,6 +728,36 @@
             applyDark(next);
         });
 
+        // 💬 レスプレビューポップアップ
+        const resPopup = document.getElementById("res-preview-popup");
+        const rpDt = document.getElementById("rp-dt-content");
+        const rpDd = document.getElementById("rp-dd-content");
+
+        document.addEventListener("click", (e) => {
+            const anchor = e.target.closest(".res-anchor");
+            if (anchor) {
+                e.preventDefault();
+                const num = parseInt(anchor.getAttribute("data-resnum"), 10);
+                const post = postPreviewMap[num];
+                if (!post) { resPopup.classList.remove("visible"); return; }
+                rpDt.innerHTML = `>>` + num + ` &nbsp; ` + post.dt;
+                rpDd.textContent = post.dd;
+                // 画面端に収まるよう位置調整
+                const vw = window.innerWidth, vh = window.innerHeight;
+                let x = e.clientX + 12, y = e.clientY + 12;
+                resPopup.classList.add("visible");
+                const pw = resPopup.offsetWidth, ph = resPopup.offsetHeight;
+                if (x + pw > vw - 8) x = vw - pw - 8;
+                if (y + ph > vh - 8) y = vh - ph - 8;
+                if (x < 4) x = 4;
+                if (y < 4) y = 4;
+                resPopup.style.left = x + "px";
+                resPopup.style.top = y + "px";
+            } else {
+                resPopup.classList.remove("visible");
+            }
+        });
+
         // 🔍 ライトボックス
         const lightbox = document.getElementById("lightbox");
         const lightboxImg = document.getElementById("lightbox-img");
@@ -741,7 +787,11 @@
             });
         }
 
+        // 💬 レスプレビュー用マップ（スレッドを開くたびにリセット）
+        let postPreviewMap = {};
+
         function openThread(threadId, threadTitle) {
+            postPreviewMap = {};
             currentThreadId = threadId;
             currentThreadTitle.textContent = threadTitle;
             currentLocationDisplay.textContent = threadTitle;
@@ -785,13 +835,17 @@
                             img.onclick = () => openLightbox(post.imageData);
                             toggleBtn.onclick = () => {
                                 const isOpen = img.classList.toggle("open");
-                                toggleBtn.textContent = isOpen ? "閉じる" : "展開";
+                                toggleBtn.textContent = isOpen ? "閉じる" : "画像を展開";
                             };
                             postGroup.appendChild(toggleBtn);
                             postGroup.appendChild(img);
                         }
 
                         postList.appendChild(postGroup);
+                        postPreviewMap[count] = {
+                            dt: `<b>${post.name || '名無しさん'}</b> ${post.time || ''} <span style="font-family:monospace;font-size:11px;">${post.uid || ''}</span>`,
+                            dd: post.text || ''
+                        };
                         count++;
                     }
                 }
@@ -1366,6 +1420,12 @@
         initAdminBrowser();
         renderBbsMenu();
     </script>
+    <!-- 💬 レスプレビューポップアップ -->
+    <div id="res-preview-popup">
+        <div class="rp-dt" id="rp-dt-content"></div>
+        <div class="rp-dd" id="rp-dd-content"></div>
+    </div>
+
     <!-- 🔍 ライトボックス -->
     <div id="lightbox">
         <span id="lightbox-close">✕</span>
