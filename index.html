@@ -138,13 +138,43 @@
                 display: inline-block;
             }
         }
+        /* 🌙 ダークモード */
+        body.dark { background-color: #1a1a1a !important; color: #d0d0d0 !important; }
+        body.dark a { color: #7799ff; }
+        body.dark a:hover { color: #ff6666; }
+        body.dark .nav-text { background-color: #2a2a2a; border-color: #444; color: #bbb; }
+        body.dark .sidebar-box { background-color: #242424; border-color: #444; }
+        body.dark .sidebar-box .cat-title { color: #ff6666; border-color: #555; }
+        body.dark .board-title { color: #ff6666; border-color: #444; }
+        body.dark .thread-list-box { background-color: #1e1e1e; border-color: #444; }
+        body.dark .posts-box { background-color: #1e1e1e; border-color: #444; }
+        body.dark .post-dt { color: #bbb; }
+        body.dark .post-dt b { color: #66bb66; }
+        body.dark .post-id { color: #888; }
+        body.dark .post-dd { color: #ccc; }
+        body.dark .post-group:target { background-color: #3a3200; }
+        body.dark .form-container { background-color: #242424; border-color: #444; }
+        body.dark .form-container h3 { color: #ff6666; border-color: #444; }
+        body.dark .form-row input[type="text"],
+        body.dark .form-row textarea,
+        body.dark .thread-search-box { background: #2e2e2e !important; color: #d0d0d0 !important; border-color: #555 !important; }
+        body.dark .btn-submit { background: #333; border-color: #666; color: #ccc; }
+        body.dark .btn-submit:hover { background: #444; }
+        body.dark .thread-header-title { color: #ff6666; border-color: #ff6666; }
+        body.dark .res-anchor { color: #7799ff; }
+        body.dark .post-img { border-color: #555; }
+        body.dark #lightbox { background: rgba(0,0,0,0.92); }
+        body.dark .img-toggle-btn { color: #7799ff; border-color: #7799ff; }
+        body.dark .img-toggle-btn:hover { background: #2a3050; }
+        .dark-mode-btn { background: #eee; color: #555; border: 1px solid #aaa; border-radius: 3px; font-size: 11px; padding: 1px 7px; cursor: pointer; margin-left: 8px; vertical-align: middle; }
+        body.dark .dark-mode-btn { background: #333; color: #ffd700; border-color: #666; }
     </style>
 </head>
 <body>
 
     <div class="nav-text">
         <a id="navHomeBtn">■板一覧（ホーム）</a> ＞ <span id="currentLocationDisplay">トップページ</span>
-        <span style="float: right;">👥 現在: <b id="onlineCount">0</b> 人 | <a id="navAdminBtn">⚙️ 管理者部屋</a></span>
+        <span style="float: right;">👥 現在: <b id="onlineCount">0</b> 人 | <a id="navAdminBtn">⚙️ 管理者部屋</a><button class="dark-mode-btn" id="darkModeToggle">🌙 ダーク</button></span>
         <div style="clear: both;"></div>
     </div>
 
@@ -669,6 +699,19 @@
             renderThreadList(allThreadData, e.target.value);
         });
 
+        // 🌙 ダークモード
+        const darkModeToggleBtn = document.getElementById("darkModeToggle");
+        const applyDark = (on) => {
+            document.body.classList.toggle("dark", on);
+            darkModeToggleBtn.textContent = on ? "☀️ ライト" : "🌙 ダーク";
+        };
+        applyDark(localStorage.getItem("bbs_dark") === "1");
+        darkModeToggleBtn.addEventListener("click", () => {
+            const next = !document.body.classList.contains("dark");
+            localStorage.setItem("bbs_dark", next ? "1" : "0");
+            applyDark(next);
+        });
+
         // 🔍 ライトボックス
         const lightbox = document.getElementById("lightbox");
         const lightboxImg = document.getElementById("lightbox-img");
@@ -988,6 +1031,21 @@
             }
         };
 
+        window.adminDeleteImageHandler = function(btn) {
+            const threadId = btn.getAttribute("data-thread");
+            const postKey = btn.getAttribute("data-post");
+            if (!threadId || !postKey) return;
+            if (confirm("この投稿の画像だけを削除しますか？\n（テキスト本文は残ります）")) {
+                set(ref(database, 'posts/' + threadId + '/' + postKey + '/imageData'), null)
+                    .then(() => {
+                        alert("画像を削除しました。");
+                        btn.disabled = true;
+                        btn.textContent = "（削除済み）";
+                        btn.style.color = "#999";
+                    });
+            }
+        };
+
         window.adminWarnHandler = function(btn) {
             const uid = btn.getAttribute("data-uid");
             if (!uid) return;
@@ -1144,6 +1202,7 @@
                         </div>
                         <div style="background:#fcfcfc; border:1px dashed #bbb; padding:5px; margin-top:3px; white-space:pre-wrap; word-break:break-all;">${log.text}</div>
                         <div style="margin-top:5px; text-align:right;">
+                            ${(!isThreadType && log.postKey) ? `<button class="admin-delete-img-btn" onclick="window.adminDeleteImageHandler(this)" data-thread="${log.threadId}" data-post="${log.postKey}" style="font-size:11px; color:#c05000; cursor:pointer; margin-right:5px;">🖼️ このメッセージの画像を削除</button>` : ''}
                             <button class="admin-delete-btn" onclick="window.adminDeleteHandler(this)" data-board="${log.boardId}" data-thread="${log.threadId}" data-post="${log.postKey}" data-logkey="${logKey}" data-is-thread="${isThreadType}" style="font-size:11px; color:red; cursor:pointer;">${isThreadType ? '🗑️ スレッドごと削除' : '🗑️ このメッセージを削除'}</button>
                             <button class="admin-warn-btn" onclick="window.adminWarnHandler(this)" data-uid="${log.uid}" style="font-size:11px; color:orange; cursor:pointer; margin-left:5px;">⚠️ 警告送信</button>
                         </div>
