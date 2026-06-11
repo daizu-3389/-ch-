@@ -1431,5 +1431,215 @@
         <span id="lightbox-close">✕</span>
         <img id="lightbox-img" src="" alt="">
     </div>
+<style>
+    /* ダークモード時のセレクトボックスの配色調整 */
+    body.dark #weatherRegionSelect {
+        background: #242424 !important;
+        color: #ccc !important;
+        border-color: #555 !important;
+    }
+</style>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    // 1. 左側サイドバー（板メニュー）の末尾に「天気・地震情報」のリンクを動的に追加
+    const sidebar = document.querySelector('.sidebar-box');
+    if (sidebar) {
+        const catTitle = document.createElement('div');
+        catTitle.className = 'cat-title';
+        catTitle.textContent = '⏳ 外部情報';
+        
+        const linksArea = document.createElement('div');
+        linksArea.className = 'board-links-area';
+        
+        const link = document.createElement('a');
+        link.className = 'board-link';
+        link.textContent = '天気・地震情報';
+        link.style.fontWeight = 'bold';
+        
+        // リンククリック時の画面切り替え処理
+        link.addEventListener('click', () => {
+            // 既存のすべての画面セクション（スレ一覧や書き込みなど）を非表示にする
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            
+            // 新しく作った天気・地震情報の画面を表示する
+            const myView = document.getElementById('weatherEarthquakeView');
+            if (myView) myView.classList.add('active');
+            
+            // 上部のナビゲーションテキストが現在のコードにあれば更新する
+            const locDisp = document.getElementById('currentLocationDisplay') || document.querySelector('.nav-text span');
+            if (locDisp) locDisp.textContent = '天気・地震情報';
+            
+            // データの初回読み込み
+            const currentRegion = document.getElementById('weatherRegionSelect').value;
+            loadWeatherData(currentRegion);
+            loadEarthquakeData();
+        });
+        
+        linksArea.appendChild(link);
+        sidebar.appendChild(catTitle);
+        sidebar.appendChild(linksArea);
+    }
+
+    // 2. メインコンテンツエリアに新しい表示画面（ビュー）を動的に追加
+    const mainBox = document.querySelector('.main-content-box');
+    if (mainBox) {
+        const viewDiv = document.createElement('div');
+        viewDiv.id = 'weatherEarthquakeView';
+        viewDiv.className = 'view-section';
+        viewDiv.innerHTML = `
+            <div class="board-title">🌍 日本地域の天気・地震情報</div>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">
+                
+                <div class="thread-list-box" style="flex: 1; min-width: 280px; padding: 12px; border: 1px solid #ccc;">
+                    <h3 style="color: #af0000; border-bottom: 1px dashed #999; margin: 0 0 10px 0; font-size: 14px;">☀️ 地域別 天気予報</h3>
+                    <select id="weatherRegionSelect" style="padding: 4px; font-size: 13px; margin-bottom: 10px; width: 100%; border: 1px solid #aaa; background: #fff; color: #000;">
+                        <option value="130000">東京都</option>
+                        <option value="016000">北海道（石狩・空知・後志）</option>
+                        <option value="020000">青森県</option>
+                        <option value="030000">岩手県</option>
+                        <option value="040000">宮城県</option>
+                        <option value="050000">秋田県</option>
+                        <option value="060000">山形県</option>
+                        <option value="070000">福島県</option>
+                        <option value="080000">茨城県</option>
+                        <option value="090000">栃木県</option>
+                        <option value="100000">群馬県</option>
+                        <option value="110000">埼玉県</option>
+                        <option value="120000">千葉県</option>
+                        <option value="140000">神奈川県</option>
+                        <option value="150000">新潟県</option>
+                        <option value="160000">富山県</option>
+                        <option value="170000">石川県</option>
+                        <option value="180000">福井県</option>
+                        <option value="190000">山梨県</option>
+                        <option value="200000">長野県</option>
+                        <option value="210000">岐阜県</option>
+                        <option value="220000">静岡県</option>
+                        <option value="230000">愛知県</option>
+                        <option value="240000">三重県</option>
+                        <option value="250000">滋賀県</option>
+                        <option value="260000">京都府</option>
+                        <option value="270000">大阪府</option>
+                        <option value="280000">兵庫県</option>
+                        <option value="290000">奈良県</option>
+                        <option value="300000">和歌山県</option>
+                        <option value="310000">鳥取県</option>
+                        <option value="320000">島根県</option>
+                        <option value="330000">岡山県</option>
+                        <option value="340000">広島県</option>
+                        <option value="350000">山口県</option>
+                        <option value="360000">徳島県</option>
+                        <option value="370000">香川県</option>
+                        <option value="380000">愛媛県</option>
+                        <option value="390000">高知県</option>
+                        <option value="400000">福岡県</option>
+                        <option value="410000">佐賀県</option>
+                        <option value="420000">長崎県</option>
+                        <option value="430000">熊本県</option>
+                        <option value="440000">大分県</option>
+                        <option value="450000">宮崎県</option>
+                        <option value="460100">鹿児島県</option>
+                        <option value="471000">沖縄県</option>
+                    </select>
+                    <div id="weatherResultArea" style="font-size: 13px; line-height: 1.6; min-height: 100px;">選択した地域の天気を読み込み中...</div>
+                </div>
+                
+                <div class="thread-list-box" style="flex: 1; min-width: 280px; padding: 12px; border: 1px solid #ccc;">
+                    <h3 style="color: #af0000; border-bottom: 1px dashed #999; margin: 0 0 10px 0; font-size: 14px;">🌋 最近の地震情報 (最新5件)</h3>
+                    <div id="earthquakeResultArea" style="font-size: 13px; line-height: 1.6; min-height: 100px;">地震情報を取得中...</div>
+                </div>
+                
+            </div>
+        </div>
+        `;
+        mainBox.appendChild(viewDiv);
+        
+        // 都道府県切り替え時のイベントを設定
+        document.getElementById('weatherRegionSelect').addEventListener('change', (e) => {
+            loadWeatherData(e.target.value);
+        });
+    }
+});
+
+// ☀️ 気象庁公式のパブリックJSONからデータを取得して解析する関数
+function loadWeatherData(code) {
+    const resultArea = document.getElementById('weatherResultArea');
+    if (!resultArea) return;
+    
+    resultArea.textContent = "天気を読み込み中...";
+    
+    fetch(`https://www.jma.go.jp/bosai/forecast/data/forecast/${code}.json`)
+        .then(res => res.json())
+        .then(data => {
+            const reportDatetime = new Date(data[0].reportDatetime).toLocaleString('ja-JP');
+            let html = `<div style="font-size:11px; color:#666; margin-bottom:8px;">発表時刻: ${reportDatetime}</div>`;
+            
+            // 選択された都道府県内の詳細地域ごとにループしてパース
+            data[0].timeSeries[0].areas.forEach(area => {
+                html += `<div style="font-weight:bold; color:#008000; margin-top:8px;">【${area.area.name}】</div>`;
+                const times = data[0].timeSeries[0].timeDefines;
+                area.weathers.forEach((weather, index) => {
+                    const dateStr = new Date(times[index]).toLocaleDateString('ja-JP', {month:'short', day:'numeric'});
+                    html += `<div style="margin-left:10px; margin-bottom:4px;"><b>${dateStr}:</b> ${weather}</div>`;
+                });
+            });
+            resultArea.innerHTML = html;
+        })
+        .catch(err => {
+            resultArea.textContent = "天気情報の取得に失敗しました。";
+            console.error(err);
+        });
+}
+
+// 🌋 P2P地震情報APIからリアルタイムの地震履歴を取得する関数
+function loadEarthquakeData() {
+    const resultArea = document.getElementById('earthquakeResultArea');
+    if (!resultArea) return;
+    
+    resultArea.textContent = "地震情報を取得中...";
+    
+    fetch('https://api.p2pquake.net/v2/history?codes=551&limit=5')
+        .then(res => res.json())
+        .then(data => {
+            let html = '';
+            if (data.length === 0) {
+                html = "最近の地震情報はありません。";
+            } else {
+                data.forEach(item => {
+                    const time = item.earthquake.time;
+                    const place = item.earthquake.hypocenter.name || "不明";
+                    const scale = parseMaxScale(item.earthquake.maxScale);
+                    html += `<div style="border-bottom: 1px dashed #ccc; padding: 6px 0;">
+                        <b>発生時刻:</b> ${time}<br>
+                        <b>震源地:</b> ${place}<br>
+                        <b>最大震度:</b> <span style="color:#ff0000; font-weight:bold;">${scale}</span>
+                    </div>`;
+                });
+            }
+            resultArea.innerHTML = html;
+        })
+        .catch(err => {
+            resultArea.textContent = "地震情報の取得に失敗しました。";
+            console.error(err);
+        });
+}
+
+// 震度の数値を掲示板らしい読みやすい文字列に変える変換器
+function parseMaxScale(scale) {
+    switch(scale) {
+        case 10: return "1";
+        case 20: return "2";
+        case 30: return "3";
+        case 40: return "4";
+        case 45: return "5弱";
+        case 50: return "5強";
+        case 55: return "6弱";
+        case 60: return "6強";
+        case 70: return "7";
+        default: return "不明または調査中";
+    }
+}
+</script>
 </body>
 </html>
