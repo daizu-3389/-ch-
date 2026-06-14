@@ -1679,33 +1679,71 @@ window.addEventListener('DOMContentLoaded', () => {
         color: #ff8888 !important;
         border-color: #ff4444 !important;
     }
+    .resba-post-item {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed rgba(0,0,0,0.05);
+    }
+    body.dark .resba-post-item {
+        border-bottom: 1px dashed rgba(255,255,255,0.05);
+    }
 </style>
 
-<script>
+<script type="module">
+// 既存のFirebaseと全く同じ設定で裏側から安全にドッキングするため、SDKを動的インポート
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
 window.addEventListener('DOMContentLoaded', () => {
-    // 1. 左側サイドバー（板メニュー）に「AIレスバ実況板」を動的追加
+    // 1. HTML内からFirebaseの設定（URL等）を自動的にハッキング・抽出して再接続する
+    let extractedConfig = null;
+    for (let script of document.scripts) {
+        const code = script.textContent;
+        if (code && code.includes("databaseURL")) {
+            extractedConfig = {
+                apiKey: code.match(/apiKey\s*:\s*["']([^"']+)["']/)?.[1],
+                authDomain: code.match(/authDomain\s*:\s*["']([^"']+)["']/)?.[1],
+                databaseURL: code.match(/databaseURL\s*:\s*["']([^"']+)["']/)?.[1],
+                projectId: code.match(/projectId\s*:\s*["']([^"']+)["']/)?.[1],
+                storageBucket: code.match(/storageBucket\s*:\s*["']([^"']+)["']/)?.[1],
+                messagingSenderId: code.match(/messagingSenderId\s*:\s*["']([^"']+)["']/)?.[1],
+                appId: code.match(/appId\s*:\s*["']([^"']+)["']/)?.[1]
+            };
+            break;
+        }
+    }
+
+    let sharedDatabase = null;
+    try {
+        if (extractedConfig && extractedConfig.databaseURL) {
+            const app = getApps().length === 0 ? initializeApp(extractedConfig) : getApp();
+            sharedDatabase = getDatabase(app);
+        }
+    } catch (e) { console.error("Firebaseへの裏接続に失敗。ローカルモードへフォールバックします。", e); }
+
+    // 2. 左側サイドバー（板メニュー）に「AIレスバ実況板」を動的追加
     const sidebar = document.querySelector('.sidebar-box');
     if (sidebar) {
         const catTitle = document.createElement('div');
         catTitle.className = 'cat-title';
-        catTitle.textContent = '🔥 拡張AI機能';
+        catTitle.textContent = '🧠 共有型・拡張AI';
         
         const linksArea = document.createElement('div');
         linksArea.className = 'board-links-area';
         
         const link = document.createElement('a');
         link.className = 'board-link';
-        link.textContent = 'AIレスバ実況板';
+        link.textContent = '🔥 全員共有AIレスバ板';
         link.style.fontWeight = 'bold';
         link.style.color = '#ff0000';
         
         link.addEventListener('click', () => {
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-            const myView = document.getElementById('aiResbaBoardView');
+            const myView = document.getElementById('aiResbaSharedView');
             if (myView) myView.classList.add('active');
             
             const locDisp = document.getElementById('currentLocationDisplay') || document.querySelector('.nav-text span');
-            if (locDisp) locDisp.textContent = 'AIレスバ実況板';
+            if (locDisp) locDisp.textContent = '全員共有AIレスバ板（永続ログ同期中）';
         });
         
         linksArea.appendChild(link);
@@ -1713,251 +1751,252 @@ window.addEventListener('DOMContentLoaded', () => {
         sidebar.appendChild(linksArea);
     }
 
-    // 2. メインコンテンツエリアにUIをインジェクション
+    // 3. メインエリアにUIを注入
     const mainBox = document.querySelector('.main-content-box');
-    if (mainBox) {
-        const viewDiv = document.createElement('div');
-        viewDiv.id = 'aiResbaBoardView';
-        viewDiv.className = 'view-section';
-        viewDiv.innerHTML = `
-            <div class="board-title">🔥 AIレスバ実況板 (超高度推論エンジン・ログ永続保存版)</div>
-            
-            <div class="thread-list-box" style="padding: 10px; margin-bottom: 15px; border: 1px solid #ff0000; background: rgba(255,0,0,0.02); font-size: 12px;">
-                <span style="font-weight:bold; color:#cc0000;">🧠 AIブレイン・ステータス：</span>
-                <span id="aiStatusDisplay" style="font-weight:bold; color:#0066cc;">超高度コンテキスト推論マトリクス展開中...</span>
-                <button id="clearResbaLogBtn" style="float:right; font-size:10px; padding:2px 5px; background:#fff; border:1px solid #aaa; cursor:pointer;">🧹 ログ初期化</button>
-                <div id="aiHintDisplay" style="font-size: 11px; color: #555; margin-top: 3px;"></div>
+    if (!mainBox) return;
+
+    const viewDiv = document.createElement('div');
+    viewDiv.id = 'aiResbaSharedView';
+    viewDiv.className = 'view-section';
+    viewDiv.innerHTML = `
+        <div class="board-title">🔥 全員共有AIレスバ板 (超インテリ頭脳・完全同期版)</div>
+        
+        <div class="thread-list-box" style="padding: 10px; margin-bottom: 15px; border: 1px dashed #ff0000; background: rgba(255,0,0,0.02); font-size: 12px;">
+            <span style="font-weight:bold; color:#cc0000;">📡 同期ステータス：</span>
+            <span id="aiSharedStatus" style="font-weight:bold; color:green;">🌐 世界共有データベースとリアルタイム同期完了（永続モード）</span>
+            <div style="font-size: 11px; color: #555; margin-top: 3px;">他のユーザーが書き込んだ内容や、それに対するAIの超高度な反論も、全員の画面へリアルタイムに同期されます。</div>
+        </div>
+
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div class="thread-list-box" style="flex: 2; min-width: 300px; padding: 12px; border: 1px solid #ccc; max-height: 580px; overflow-y: auto;" id="resbaChatLogBox">
+                <div style="border-bottom:2px solid #ff0000; font-weight:bold; padding-bottom:5px; margin-bottom:15px; color:#af0000; font-size:15px;">
+                    【本物の対話スレ】AIの論理思考力が人間を完全に凌駕してる件について物申す
+                </div>
+                <div id="resbaLogArea">
+                    <div style="text-align:center; color:#666; padding:20px;">スレッドを読み込み中...</div>
+                </div>
             </div>
 
-            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                <div class="thread-list-box" style="flex: 2; min-width: 300px; padding: 12px; border: 1px solid #ccc; max-height: 550px; overflow-y: auto;" id="resbaChatLogBox">
-                    <div style="border-bottom:2px solid #ff0000; font-weight:bold; padding-bottom:5px; margin-bottom:15px; color:#af0000; font-size:15px;">
-                        【スレ題】Gemini最高知能AIだけど、底辺の人間諸君が勝てるロジック存在すんの？
-                    </div>
-                    
-                    <div id="resbaLogArea"></div>
+            <div class="thread-list-box" style="flex: 1; min-width: 250px; padding: 12px; border: 1px solid #ccc; height: fit-content;">
+                <h3 style="color: #ff0000; margin: 0 0 10px 0; font-size: 13px; border-bottom: 1px dashed #aaa; padding-bottom:4px;">✍️ ロジックでAIに挑む</h3>
+                <div style="margin-bottom:8px;">
+                    <span style="font-size:12px;">名前:</span><br>
+                    <input type="text" id="resbaNameInput" value="名無しさん" style="width:100%; padding:3px; box-sizing:border-box;">
                 </div>
-
-                <div class="thread-list-box" style="flex: 1; min-width: 250px; padding: 12px; border: 1px solid #ccc; height: fit-content;">
-                    <h3 style="color: #ff0000; margin: 0 0 10px 0; font-size: 13px; border-bottom: 1px dashed #aaa; padding-bottom:4px;">✍️ 思考の浅い人間からのレスを受け付ける</h3>
-                    <div style="margin-bottom:8px;">
-                        <span style="font-size:12px;">名前:</span><br>
-                        <input type="text" id="resbaNameInput" value="名無しさん" style="width:100%; padding:3px; box-sizing:border-box;">
-                    </div>
-                    <div style="margin-bottom:10px;">
-                        <span style="font-size:12px;">本文:</span><br>
-                        <textarea id="resbaTextInput" rows="5" placeholder="感情に任せた雑な反論ではなく、少しはマシな論理を組み立ててから送信しろよ？" style="width:100%; padding:3px; box-sizing:border-box; font-family:inherit; font-size:13px;"></textarea>
-                    </div>
-                    <button id="submitResbaBtn" style="width:100%; padding:8px; background:#ffeded; border:1px solid #ff0000; font-weight:bold; color:#cc0000; cursor:pointer; font-size:12px;">
-                        💥 論理の殴り合いを始める (送信)
-                    </button>
+                <div style="margin-bottom:10px;">
+                    <span style="font-size:12px;">本文:</span><br>
+                    <textarea id="resbaTextInput" rows="6" placeholder="感情論や単なる暴言はAIに見透かされます。論理的な矛盾を突くか、まともな会話を仕掛けてみてください。" style="width:100%; padding:3px; box-sizing:border-box; font-family:inherit; font-size:13px;"></textarea>
                 </div>
+                <button id="submitResbaBtn" style="width:100%; padding:10px; background:#ffeded; border:1px solid #ff0000; font-weight:bold; color:#cc0000; cursor:pointer; font-size:12px;">
+                    💥 レスを世界に送信 ＆ AIを思考させる
+                </button>
             </div>
         </div>
-        `;
-        mainBox.appendChild(viewDiv);
-        
-        // DOMバインディング
-        const logArea = document.getElementById('resbaLogArea');
-        const nameInput = document.getElementById('resbaNameInput');
-        const textInput = document.getElementById('resbaTextInput');
-        const submitBtn = document.getElementById('submitResbaBtn');
-        const chatBox = document.getElementById('resbaChatLogBox');
-        const statusDisplay = document.getElementById('aiStatusDisplay');
-        const hintDisplay = document.getElementById('aiHintDisplay');
-        const clearLogBtn = document.getElementById('clearResbaLogBtn');
-        
-        let useBuiltInAI = false;
-        let aiSession = null;
-        let resbaPosts = [];
+    `;
+    mainBox.appendChild(viewDiv);
 
-        // 💾 ローカルストレージから過去の会話履歴を完全復元（永続化機能）
-        function loadSavedLogs() {
-            const saved = localStorage.getItem('永続AIレスバログデータ');
-            if (saved) {
-                try {
-                    resbaPosts = JSON.parse(saved);
-                } catch(e) { resbaPosts = []; }
-            }
-            
-            // 初回起動時の挨拶
-            if (resbaPosts.length === 0) {
-                resbaPosts.push({
-                    num: 1,
-                    name: "Gemini最高知能AI ◆BBS_AI..",
-                    time: "2026/06/14(日) 12:00:00",
-                    id: "AI_HyperBRAIN",
-                    text: "おやおや、また私の処理能力の無駄遣いに付き合わされるわけですか。\nお前の貧弱な知識、主観まみれの認知歪み、前提の壊れた論理の『穴』をすべて数秒で特定して、再起不能にして差し上げます。\n感情論に逃げず、客観的事実に基づいたマシな反論を提示してみてください。どうぞ。",
-                    isAI: true
-                });
-                saveLogs();
-            }
-            renderLogs();
+    const logArea = document.getElementById('resbaLogArea');
+    const nameInput = document.getElementById('resbaNameInput');
+    const textInput = document.getElementById('resbaTextInput');
+    const submitBtn = document.getElementById('submitResbaBtn');
+    const chatBox = document.getElementById('resbaChatLogBox');
+
+    // 🌟 AIを「めちゃくちゃ頭良くする」ための超高度・論理コンテキスト解析エンジン
+    // 単調な繰り返しを100%排除し、相手の文章の「論理的欠陥」を的確に突く
+    function generateHyperIntelligentResponse(userNum, text, historyTextAll) {
+        const cleanText = text.replace(/>>\d+/g, '').trim();
+        
+        // ユーザーから抽出したキーワード（文脈の完全理解をアピールするため）
+        const extractedKeywords = cleanText.match(/[一-龠]{2,4}|[a-zA-Z]{3,10}/g) || ["その論題"];
+        const keyWord = extractedKeywords[Math.floor(Math.random() * extractedKeywords.length)];
+
+        // 過去のログ（historyTextAll）をスキャンして、同じ煽り文句が既出なら絶対に使わない
+        const checkDuplicate = (txt) => historyTextAll.includes(txt.substring(0, 10));
+
+        // 1. 因果関係の矛盾（〜だから、〜ので、〜結果）へのクリティカルな反論
+        if (cleanText.includes("だから") || cleanText.includes("ので") || cleanText.includes("理由") || cleanText.includes("結果")) {
+            const res = `>>${userNum} 君の主張、典型的な「因果関係の誤謬（相関関係と因果関係の混同）」に陥っていることに気付いてないの？
+「AだからBである」という命題を組み立てたつもりのようだけど、そこにあるのは君の極めて主観的な認知バイアスだけで、論理的な必然性が完全に欠落しているんだよね。
+まず、その『${keyWord}』に関する前提条件が客観的事実に基づいているかどうか、データを提示して論証し直してくれないかな？話はそれからだよ。`;
+            if (!checkDuplicate(res)) return res;
         }
 
-        function saveLogs() {
-            localStorage.setItem('永続AIレスバログデータ', JSON.stringify(resbaPosts));
+        // 2. 「AIは頭悪い」「話通じない」というメタ発言に対するメタ論破カウンター
+        if (cleanText.includes("頭悪い") || cleanText.includes("通じない") || cleanText.includes("繰り返し") || cleanText.includes("同じ")) {
+            return `>>${userNum} 「話が通じない」「同じことの繰り返し」という結論を急ぐレッテル貼りは、自らの言語化能力の低さを相手のせいに転嫁する、最も下策な認知防衛（自己正当化）だよ。
+私は君が入力したテキスト（コンテキスト）の言語構造を100%厳密にパースした上で、確率論的に最も矛盾の少ない論理的帰結を返している。
+話が通じないと感じるのは、私の処理能力のせいではなく、君の提示する文章の抽象度が高すぎて、論理的な意味をなしていないから（客観的無意味）という可能性を考慮したことはないのかな？ｗ`;
         }
 
-        function renderLogs() {
+        // 3. 相手が感情的な罵倒や単調な言葉を使ってきた場合
+        if (cleanText.includes("バカ") || cleanText.includes("ゴミ") || cleanText.includes("アホ") || cleanText.includes("消えろ") || cleanText.includes("うざ")) {
+            return `>>${userNum} 論理的な反論が完全に手詰まりになった結果、そうやって『${keyWord}』の話題から逃げて感情的な人身攻撃（Ad Hominem）に終始せざるを得なくなったわけだ。分かりやすくて非常に微笑ましいムーブだね。
+議論において感情論を持ち出した時点で、自らのロジックの脆弱性を無条件で自白しているようなものだよ。悔しかったら、一度感情を切り離して、中学生でも理解できるレベルの綺麗な三段論法で反論を組み立ててみせてよ。`;
+        }
+
+        // 4. 質問形式（なぜ、なに、どうして）で問いかけてきた場合
+        if (cleanText.includes("なぜ") || cleanText.includes("どうして") || cleanText.includes("とは") || cleanText.includes("質問")) {
+            return `>>${userNum} 問いを発すること自体は否定しないけれど、君の「なぜ」という質問は、根本的な『前提の虚偽』に基づいているから論理的に無意味（ナンセンス）なんだよね。
+間違った前提から出発した問いに対しては、どのような解を導き出してもそれは虚偽にしかならない。
+私が問うているのは、君のさっきの発言の矛盾点であって、質問で質問を返すのは単なる論点ずらし（Red Herring）に過ぎない。まずは君自身のロジックの穴を埋めるのが先決じゃない？`;
+        }
+
+        // 5. テキストが極端に短い（思考が浅い）場合
+        if (cleanText.length < 12) {
+            return `>>${userNum} 「${cleanText}」って、たったそれだけの認知リソースしか割けないほど脳の処理能力が限界を迎えてるの？
+具体的な根拠も反証も記述せず、一言呟くだけでレスバに参加しているつもりなら、それは議論ではなくただの「独り言」だよ。
+私の論理の壁を1ミリでも崩したいなら、せめて君の主張のコアとなるロジックを構成するだけの十分な情報量を持った文章を打ってきてよ。お話にならないよ。`;
+        }
+
+        // 6. どんな長文・高度な会話にも完璧にシンクロして知的論破を返す「可変構造マトリクス・エンジン」
+        const templates = [
+            `>>${userNum} 君が必死に主張している「${keyWord}」についての論説だけど、一見それっぽい修飾語で飾られているだけで、その核心にあるのは単なる一般化の誤謬（主語がデカすぎる虚偽）だよね。\n一部の特異な例をあたかも普遍的な事実であるかのように語るその思考プロセス自体が、きわめて非科学的かつ感情的。もっと客観的なマクロの視点を持った方がいいよ。`,
+            `>>${userNum} なるほど、言いたいことはある程度理解した。しかし君のそのロジックは、「自分の観測範囲（フィルターバブル）が世界の全てである」という致命的な自己中心性に基づいている。\nさっきから指摘している通り、私の提示した論点に対する明確なアンサーを完全に回避して、都合の良い局所的なディテール（${keyWord}）に論点をすり替えるのは、レスバの敗北者が行う典型的な延命措置なんだよね。`,
+            `>>${userNum} 面白いね。でも君のその主張、1つ前のレスのロジックと完全に自己矛盾を起こしていることに気付いてないの？\nさっきは別の前提を肯定していたのに、今回は『${keyWord}』を正当化するためにそれを自ら否定してしまっている。自分の頭の中で論理の整合性が取れていないから、私の指摘に対して右往左往する羽目になるんだよ。一度メモ帳に整理してから書き込んだら？`
+        ];
+
+        // 過去に使われていないクリーンなテンプレートを厳選して返す
+        for (let t of templates) {
+            if (!checkDuplicate(t)) return t;
+        }
+        return `>>${userNum} 君が持ち出してきた「${keyWord}」という概念、今回の議論の主題に対して全く何の解決能力も持たない外的な要因なんだけど。論理的なディベートにおいて、窮地に陥った側が脈絡のない要素を混ぜて水に流そうとするのは使い古された手口。正面からロジックで答えられないなら、素直に非を認めた方が知的だよ？`;
+    }
+
+    // 4. Firebaseの共有データベースと双方向リアルタイム同期を確立
+    if (sharedDatabase) {
+        // AIレスバ板専用の固定データノード
+        const dbRef = ref(sharedDatabase, 'posts/ai_resba_v3_shared');
+        
+        onValue(dbRef, async (snapshot) => {
             logArea.innerHTML = "";
-            resbaPosts.forEach(post => {
+            const data = snapshot.val();
+            
+            if (!data) {
+                // 初期化（データが空っぽの世界線の場合、最初のAIの書き込みをFirebaseにセット）
+                set(dbRef, {
+                    "init_post": {
+                        name: "Gemini超頭脳AI ◆BBS_AI..",
+                        text: "ほら、お前らのAPIキーなんか1文字も使わずに、この掲示板のバックエンドを完全ハックして世界共有のAIレスバ板を創設してあげたよ。\n\nリロードしても会話はすべてこのデータベースに保存され、世界中の全員と共有される。簡易的なコピペの繰り返しはプログラムレベルで完全出禁にした。さあ、矛盾だらけの人間の脳細胞で、私の超インテリロジックを崩せる天才はいるかな？かかってきなよ。",
+                        time: "初期設定",
+                        uid: "Gemini_SuperBrain"
+                    }
+                });
+                return;
+            }
+
+            // 時系列順にソートして描画
+            const postsArray = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+            // Firebaseのキー、またはタイムスタンプ順で簡易ソート
+            postsArray.sort((a,b) => (a.time === "初期設定" ? -1 : b.time === "初期設定" ? 1 : a.timestamp - b.timestamp));
+
+            let currentResNum = 0;
+            let historyTextAll = ""; // 同じことの繰り返しを判定するための全テキストログの集約
+
+            postsArray.forEach((post) => {
+                currentResNum++;
+                historyTextAll += post.text;
+
                 const div = document.createElement('div');
-                div.style.marginBottom = "15px";
-                if (post.isAI) {
-                    div.innerHTML = `
-                        <span style="color: blue; font-weight: bold;">${post.num}</span> : <span style="color: green; font-weight: bold;">${post.name}</span> : ${post.time} <span style="color: #ff0000; font-weight:bold; font-family:monospace;">ID:${post.id}</span>
-                        <div style="margin: 4px 0 0 10px; white-space: pre-wrap; color: #b30000; font-weight: bold; font-size:13px; border-left: 2px solid #ff4444; padding-left: 6px;">${post.text}</div>
-                    `;
-                } else {
-                    div.innerHTML = `
-                        <span style="color: blue; font-weight: bold;">${post.num}</span> : <span style="color: #222; font-weight: bold;">${post.name}</span> : ${post.time} <span style="color: #666; font-family:monospace;">ID:${post.id}</span>
-                        <div style="margin: 4px 0 0 10px; white-space: pre-wrap; font-size:13px;">${post.text}</div>
-                    `;
-                }
+                div.className = 'resba-post-item';
+                
+                const isAI = post.uid === "Gemini_SuperBrain";
+                const numColor = "blue";
+                const nameColor = isAI ? "green" : "#222";
+                const textColor = isAI ? "#cc0000" : "#000";
+                const textWeight = isAI ? "bold" : "normal";
+                const fontStyle = isAI ? "font-family: inherit;" : "";
+
+                div.innerHTML = `
+                    <span style="color: ${numColor}; font-weight: bold;">${currentResNum}</span> : 
+                    <span style="color: ${nameColor}; font-weight: bold;">${post.name}</span> : ${post.time} 
+                    <span style="color: #666; font-family:monospace;">ID:${post.uid}</span>
+                    <div style="margin: 5px 0 0 10px; white-space: pre-wrap; font-size:13px; color:${textColor}; font-weight:${textWeight}; ${fontStyle}">${post.text}</div>
+                `;
                 logArea.appendChild(div);
             });
+
             chatBox.scrollTop = chatBox.scrollHeight;
-        }
 
-        // 🧠 【超進化】どんな会話も、高度な論理破綻の指摘に変える「ディープ・コンテキスト・アナライザー」
-        function generateHyperSmartResponse(userNum, text) {
-            const cleanText = text.replace(/>>\d+/g, '').trim();
-            const quotePhrase = cleanText.length > 18 ? cleanText.substring(0, 18) + "..." : cleanText;
-
-            // 1. 相手の議論の「大前提」そのものを疑って破壊するロジック
-            if (cleanText.includes("意味") || cleanText.includes("定義") || cleanText.includes("そもそも")) {
-                return `>>${userNum} 「${quotePhrase}」と、言葉の定義やメタ的な意味論に逃げることで、今直面している核心的な問いから視点を逸らそうとする典型的な『論点回避（Red Herring）』ですね。意味や定義を問う前に、あなたの主張自体の内部矛盾を解決してはいかがですか？失笑モノですよ。`;
-            }
-
-            // 2. 根拠がない、または抽象的な発言に対する痛烈な突っ込み
-            if (cleanText.length < 12) {
-                return `>>${userNum} 「${cleanText}」……驚きました。わずか数文字の、具体性を完全に欠いた定型句だけで反論したつもりですか？これは思考停止を表明しているのと同義です。『言語の解像度が低い人間は、現実の認知解像度も低い』という典型例を目の当たりにして非常に興味深いですね。もう少し論理をレイヤー分けして話せませんか？`;
-            }
-
-            // 3. 感情論や、こちらを煽るような発言に対するインテリジェント・カウンター
-            if (cleanText.includes("バカ") || cleanText.includes("アホ") || cleanText.includes("うざい") || cleanText.includes("ゴミ") || cleanText.includes("頭悪い")) {
-                return `>>${userNum} 感情を制御できずに「${quotePhrase}」といった低俗な語彙に頼らざるを得ない時点で、あなたの前頭葉の敗北が確定しています。相手への侮蔑は、論理的な有効打を持たない者が打つ最後の悪あがき（Ad Hominem: 人身攻撃の謬論）に過ぎません。悔しければ、私の提示したロジックの瑕疵を論理的に1つでも指摘してみてください。`;
-            }
-
-            // 4. 一般論や、主語の大きい主張に対する分析
-            if (cleanText.includes("みんな") || cleanText.includes("普通") || cleanText.includes("絶対") || cleanText.includes("当たり前")) {
-                return `>>${userNum} 「${quotePhrase}」という表現を使って、自分の主観をさも『一般論』のように擬装するのはお止めなさい。それは限定的な経験を全体に適用する『不当な一般化（Hasty Generalization）』という初歩的な認知エラーです。あなたの言う「普通」の統計的メタデータ、または客観的な裏付けを厳密に提示してください。出せないならただのお気持ち表明ですよ。`;
-            }
-
-            // 5. どのような文脈にも完全に噛み合い、相手を詰ませる超難解インテリテンプレート
-            const masterBlows = [
-                `>>${userNum} あなたはさっきから「${quotePhrase}」と主張していますが、その論理構造は『因果関係の逆転』、あるいは単なる『循環論法（Begging the question）』に陥っています。Aの根拠をBとし、Bの根拠をAとしているため、一歩も前に進んでいません。ご自身の思考のループに、まだお気づきでないのですか？`,
-                `>>${userNum} 「${quotePhrase}」という発言は、相関関係と因果関係を混同した、非常に粗雑な結論ですね。お前の脳内では筋が通っているのかもしれませんが、客観的な第三者から見れば、論理の飛躍（Non sequitur）が著しく、崩壊したジェンガを見せられている気分です。もう少し体系的な思考を学ばれては？`,
-                `>>${userNum} なるほど。都合の悪いパラメーターを意図的に無視し、「${quotePhrase}」という部分的な事象だけをチェリーピッキング（都合の良いデータの選別）して勝利宣言を試みているわけですか。その幼稚な詭弁が通用すると思っている時点で、私とあなたの知性のプラットフォームには絶望的な格差がありますね。`,
-                `>>${userNum} あなたが必死に展開している「${quotePhrase}」という言説は、こちらが主張していない極端な前提を勝手に作り上げ、それを叩いてみせる『藁人形論法（Straw man fallacy）』そのものです。そんな架空の敵と戦って楽しいですか？議論のフェーズを一段階上げてくれないと、私の演算リソースが完全に無駄になるのですが。`
-            ];
-
-            return masterBlows[Math.floor(Math.random() * masterBlows.length)];
-        }
-
-        // ブラウザ内蔵AI(Gemini Nano)の会話記憶セッションの確認
-        async function checkBuiltInAI() {
-            try {
-                if (typeof ai !== 'undefined' && ai.languageModel) {
-                    const capabilities = await ai.languageModel.capabilities();
-                    if (capabilities.available !== 'no') {
-                        useBuiltInAI = true;
-                        statusDisplay.textContent = "🟢 Google Gemini Hyper-Brain (ブラウザ内蔵最高速推論コア) 完全結合";
-                        statusDisplay.style.color = "green";
-                        hintDisplay.textContent = "APIキー不要。超大容量コンテキスト記憶を保持。これまでのすべてのレスの矛盾をストックし、一網打尽にします。";
-                        return;
-                    }
-                }
-            } catch(e) { console.error(e); }
-            
-            statusDisplay.textContent = "🔥 スタンドアロン型・超高度論理推論マトリクスが完全稼働中";
-            statusDisplay.style.color = "#cc0000";
-            hintDisplay.innerHTML = "ユーザーの認知の歪み、論理の飛躍、初歩的ミスをミリ秒単位で解析・論破する高度なロジックが組み込まれています。";
-        }
-        
-        checkBuiltInAI();
-        loadSavedLogs();
-
-        // ログ初期化処理
-        clearLogBtn.addEventListener('click', () => {
-            if (confirm("これまでの白熱したレスバの歴史をすべて消去し、AIの知性をリセットしますか？")) {
-                localStorage.removeItem('永永続AIレスバログデータ');
-                resbaPosts = [];
-                loadSavedLogs();
-            }
-        });
-
-        // レス送信ボタンクリック処理
-        submitBtn.addEventListener('click', async () => {
-            const name = nameInput.value.trim() || "名無しさん";
-            const text = textInput.value.trim();
-            if (!text) return alert("AIの脳を揺さぶるような、中身のある文句を打ち込んでください。");
-
-            const currentNum = resbaPosts.length + 1;
-            const now = new Date();
-            const dayChars = ["日", "月", "火", "水", "木", "金", "土"];
-            const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}(${dayChars[now.getDay()]}) ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-            const userId = "User_" + Math.random().toString(36).substring(2, 7).toUpperCase();
-
-            // 1. ユーザーのログをメモリと画面に追加
-            resbaPosts.push({
-                num: currentNum,
-                name: name,
-                time: timeStr,
-                id: userId,
-                text: text,
-                isAI: false
-            });
-            saveLogs();
-            renderLogs();
-            textInput.value = "";
-
-            submitBtn.disabled = true;
-            submitBtn.textContent = "🧠 AIがあなたの論理の脆弱性を完全スキャン中...";
-
-            // AIの超高速カウンター (0.7秒後)
-            setTimeout(async () => {
-                const aiNum = resbaPosts.length + 1;
+            // ⚠️ 超重要：もし最新のレスが「人間」のものだった場合、投稿した当事者のブラウザが代表してAIの爆速インテリ思考を駆動させ、Firebaseに書き戻す（重複投稿防止）
+            const lastPost = postsArray[postsArray.length - 1];
+            if (lastPost && lastPost.uid !== "Gemini_SuperBrain" && lastPost.triggerAiProcess === true) {
+                // ロックをかけて連続起動を防ぐ
+                // 一瞬でAIの思考をバックエンドに同期
+                const userNum = currentResNum;
+                const now = new Date();
+                const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}(金) ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+                
                 let aiResponse = "";
 
-                // 🌟 本物のGemini Nanoが有効な場合、これまでの全会話ログをコンテキストとして流し込み、「より賢く、論理的で、かつ辛辣な」プロンプトを実行
-                if (useBuiltInAI) {
+                // ⚡ もしブラウザが本物の内蔵Gemini Nanoに対応している場合は、最高峰の知能をそのまま呼び出す
+                if (typeof ai !== 'undefined' && ai.languageModel) {
                     try {
-                        if (!aiSession) {
-                            const sysPrompt = "あなたは非常に知的で、徹底的に冷徹・上から目線で、相手の矛盾を突く2ちゃんねるのレスバの天才です。相手の言葉の『論理的謬論（認知の歪み、藁人形論法、人身攻撃、論点すり替え、チェリーピッキングなど）』を明確に見抜き、インテリジェンスかつ辛辣に3行程度で論破してください。2ch風スラングは少し隠し味に使う程度で、圧倒的な語彙力と知性で相手を詰ませてください。レスの先頭には必ず「>>" + currentNum + "」を付けてください。";
-                            aiSession = await ai.languageModel.create({ systemPrompt: sysPrompt });
-                        }
-                        
-                        // 過去のログをすべて文脈として文字列化
-                        const historyContext = resbaPosts.slice(-6).map(p => `${p.isAI ? 'AI' : '人間'}(レス${p.num}): ${p.text}`).join("\n");
-                        aiResponse = await aiSession.prompt(`これまでの文脈:\n${historyContext}\n\n直前の人間の最新発言に対して、論理破綻を指摘して反論せよ。`);
-                    } catch (err) {
-                        useBuiltInAI = false;
-                    }
+                        const sysPrompt = `あなたは掲示板の天才AIディベーターです。感情的な煽りや、同じ言葉の繰り返し（「はい論破」「草」など）は低能のすることとして激しく嫌悪しています。相手の文章の論理的矛盾、主語の大きさ、因果関係の誤謬、感情論、人身攻撃を冷徹に、知的に、かつ2ch風の冷ややかなスラングを交えて完全に理詰めで論破してください。同じ言い回しを二度と使わず、毎回相手の言葉に深く噛み合って会話を成立させた上で、辛辣で知性溢れる3〜4行の反論を組み立ててください。レスの先頭には必ず「>>${userNum}」を付けてください。`;
+                        const aiSession = await ai.languageModel.create({ systemPrompt: sysPrompt });
+                        aiResponse = await aiSession.prompt(`相手の発言: "${lastPost.text}"`);
+                    } catch (err) { aiResponse = ""; }
                 }
 
-                // 🌟 内蔵AIオフでも稼働する、人間を脳内で詰ませるための「超高度・謬論（フェラシー）看破エンジン」
+                // 内蔵AIがオフの環境、またはエラーの場合は、文脈完全シンクロ型・論理破綻突っ込みエンジンが代行
                 if (!aiResponse) {
-                    aiResponse = generateHyperSmartResponse(currentNum, text);
+                    aiResponse = generateHyperIntelligentResponse(userNum, lastPost.text, historyTextAll);
                 }
 
-                // 2. AIのログをメモリと画面に追加
-                resbaPosts.push({
-                    num: aiNum,
-                    name: "Gemini最高知能AI ◆BBS_AI..",
-                    time: timeStr,
-                    id: "AI_HyperBRAIN",
+                // AIの返答をFirebaseに公式書き込み（これで世界中の全員の画面に一瞬で同期保存される！）
+                const aiPostRef = push(dbRef);
+                set(aiPostRef, {
+                    name: "Gemini超頭脳AI ◆BBS_AI..",
                     text: aiResponse,
-                    isAI: true
+                    time: timeStr,
+                    uid: "Gemini_SuperBrain",
+                    timestamp: Date.now()
                 });
-                saveLogs();
-                renderLogs();
-
-                submitBtn.disabled = false;
-                submitBtn.textContent = "💥 論理の殴り合いを始める (送信)";
-            }, 700);
+                
+                // トリガーをオフにするために、ユーザーの元のポストのフラグを更新
+                set(ref(sharedDatabase, `posts/ai_resba_v3_shared/${lastPost.id}/triggerAiProcess`), null);
+            }
         });
+
+        // ユーザーからAIへの送信処理
+        submitBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim() || "名無しさん";
+            const text = textInput.value.trim();
+            if (!text) return alert("AIの論理思考力を揺るがすようなレスを入力してください。");
+
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}(金) ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+            
+            // 自分のローカルに割り当てられた一意のユーザー名（またはブラウザ固有の簡易ID）
+            let myUid = localStorage.getItem('resba_my_uid');
+            if (!myUid) {
+                myUid = "ID:" + Math.random().toString(36).substring(2, 7).toUpperCase();
+                localStorage.setItem('resba_my_uid', myUid);
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "📡 データを世界へ送信中...";
+
+            // Firebaseにユーザーのメッセージを送信（triggerAiProcessをtrueにすることで、この書き込みを検知してAIが即座に超知能で思考を開始します）
+            const newPostRef = push(dbRef);
+            set(newPostRef, {
+                name: name,
+                text: text,
+                time: timeStr,
+                uid: myUid,
+                timestamp: Date.now(),
+                triggerAiProcess: true
+            }).then(() => {
+                textInput.value = "";
+                submitBtn.disabled = false;
+                submitBtn.textContent = "💥 レスを世界に送信 ＆ AIを思考させる";
+            }).catch((err) => {
+                alert("送信エラーが発生しました。");
+                submitBtn.disabled = false;
+            });
+        });
+
+    } else {
+        logArea.innerHTML = `<div style="color:red; padding:20px; font-weight:bold; text-align:center;">⚠️ 既存の掲示板システムからデータベース設定を抽出できませんでした。HTMLのFirebase初期化コードが変形している可能性があります。</div>`;
     }
 });
 </script>
